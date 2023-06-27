@@ -5,15 +5,123 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <folly/Benchmark.h>
-#include <folly/init/Init.h>
-
+#include <iostream>
 #include "hermes/CompileJS.h"
 #include "hermes/hermes.h"
+#include <chrono>
+#include <ApiLoaders/HermesApi.h>
+#include <NodeApiJsiRuntime.h>
 
 using namespace facebook::jsi;
+using namespace Microsoft::NodeApiJsi;
+using Clock = std::chrono::high_resolution_clock;
+using TimePoint = Clock::time_point;
+using Duration = Clock::duration;
 
-static Function function(Runtime& rt, const char* code) {
+template <typename T>
+void doNotOptimizeAway(const T&t){
+  // asm volatile("" : : "r"(t));
+}
+
+struct BenchmarkSuspender {
+  struct DismissedTag {};
+  static inline constexpr DismissedTag Dismissed{};
+
+  BenchmarkSuspender() : start(Clock::now()) {}
+
+  BenchmarkSuspender(const BenchmarkSuspender &) = delete;
+  BenchmarkSuspender(BenchmarkSuspender &&rhs) noexcept {
+    start = rhs.start;
+    rhs.start = {};
+  }
+
+  BenchmarkSuspender &operator=(const BenchmarkSuspender &) = delete;
+  BenchmarkSuspender &operator=(BenchmarkSuspender &&rhs) = delete;
+
+  ~BenchmarkSuspender() {
+    if (start != TimePoint{}) {
+      tally();
+    }
+  }
+
+  void dismiss() {
+    assert(start != TimePoint{});
+    tally();
+    start = {};
+  }
+
+  void rehire() {
+    assert(start == TimePoint{});
+    start = Clock::now();
+  }
+
+  static Duration timeSpent;
+
+ private:
+  void tally() {
+    auto end = Clock::now();
+    timeSpent += end - start;
+    start = end;
+  }
+
+  TimePoint start;
+};
+
+Duration BenchmarkSuspender::timeSpent{};
+
+#define BENCHMARK(name, iters)               \
+  static void BM_##name(int iters);       \
+  static bool foo_##name = runBM(BM_##name, #name); \
+  void BM_##name(int iters)
+#define BENCHMARK_RELATIVE(name, iters) BENCHMARK(name, iters)
+
+static bool runBM(void (*func)(int), const char *name) {
+  int iters = 1;
+  do {
+    BenchmarkSuspender::timeSpent = Duration{};
+    auto start = Clock::now();
+    func(iters);
+    auto totalTime = Clock::now() - start;
+
+    // Spend at least one second on each benchmark.
+    if(totalTime < std::chrono::milliseconds(100)) {
+      iters *= (std::chrono::milliseconds(200) / totalTime);
+      continue;
+    }
+
+    auto netTime = totalTime - BenchmarkSuspender::timeSpent;
+    auto perIter = netTime / iters;
+    auto perIterCount =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(perIter).count();
+    std::cout << name << " took " << perIterCount << "ns/iter" << std::endl;
+    return true;
+  } while(true);
+}
+
+std::unique_ptr<facebook::jsi::Runtime> createHermesRuntime(){
+#if 0
+  return facebook::hermes::makeHermesRuntime();
+#else
+  HermesApi *hermesApi = HermesApi::fromLib();
+  HermesApi::setCurrent(hermesApi);
+
+  jsr_config config{};
+  jsr_runtime runtime{};
+  napi_env env{};
+  hermesApi->jsr_create_config(&config);
+  hermesApi->jsr_config_enable_gc_api(config, true);
+  hermesApi->jsr_create_runtime(config, &runtime);
+  hermesApi->jsr_delete_config(config);
+  hermesApi->jsr_runtime_get_node_api_env(runtime, &env);
+
+  NodeApiEnvScope envScope{env};
+
+  return makeNodeApiJsiRuntime(
+      env, hermesApi, [runtime]() { HermesApi::current()->jsr_delete_runtime(runtime); });
+#endif
+}
+
+static Function function(Runtime &rt, const char *code) {
   std::string bytecode;
   hermes::compileJS(code, bytecode, /* optimize = */ true);
   Value val = rt.evaluateJavaScript(
@@ -23,8 +131,8 @@ static Function function(Runtime& rt, const char* code) {
 
 BENCHMARK(CallJSFunc1, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   auto f = function(*rt, "(function (n) { return ++n; })");
   double result = 0.0;
   // End of setup.
@@ -32,7 +140,7 @@ BENCHMARK(CallJSFunc1, n) {
 
   for (int i = 0; i < n; ++i) {
     result = f.call(*rt, result).getNumber();
-    folly::doNotOptimizeAway(result);
+    doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
@@ -41,8 +149,8 @@ BENCHMARK(CallJSFunc1, n) {
 
 BENCHMARK(CallJSFunc4, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   auto f = function(*rt, "(function (a, b, c, d) { return a + b + c + d; })");
   double result = 0.0;
   // End of setup.
@@ -50,7 +158,7 @@ BENCHMARK(CallJSFunc4, n) {
 
   for (int i = 0; i < n; ++i) {
     result = f.call(*rt, result, 1, 2, 3).getNumber();
-    folly::doNotOptimizeAway(result);
+    doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
@@ -59,8 +167,8 @@ BENCHMARK(CallJSFunc4, n) {
 
 BENCHMARK_RELATIVE(CallJSFunc4Fixed, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   auto f = function(*rt, "(function (a, b, c, d) { return a + b + c + d; })");
   double result = 0.0;
   Value args[4] = {Value(0), Value(1), Value(2), Value(3)};
@@ -68,8 +176,8 @@ BENCHMARK_RELATIVE(CallJSFunc4Fixed, n) {
   braces.dismiss();
 
   for (int i = 0; i < n; ++i) {
-    result = f.call(*rt, (const Value*)args, (size_t)4).getNumber();
-    folly::doNotOptimizeAway(result);
+    result = f.call(*rt, (const Value *)args, (size_t)4).getNumber();
+    doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
@@ -78,8 +186,8 @@ BENCHMARK_RELATIVE(CallJSFunc4Fixed, n) {
 
 BENCHMARK(CallJSFunc1Object, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   auto obj = Object(*rt);
   obj.setProperty(*rt, "n", 1);
   Function f = function(*rt, "(function (obj) { return obj.n; })");
@@ -90,9 +198,9 @@ BENCHMARK(CallJSFunc1Object, n) {
   for (int i = 0; i < n; ++i) {
     Value args[] = {Value(*rt, obj)};
     double result =
-        f.call(*rt, static_cast<const Value*>(args), static_cast<size_t>(1))
+        f.call(*rt, static_cast<const Value *>(args), static_cast<size_t>(1))
             .getNumber();
-    folly::doNotOptimizeAway(result);
+    doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
@@ -101,8 +209,8 @@ BENCHMARK(CallJSFunc1Object, n) {
 
 BENCHMARK(MakeValueFromObject, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   auto obj = facebook::jsi::Object(*rt);
   obj.setProperty(*rt, "n", 1);
   // End of setup.
@@ -110,7 +218,7 @@ BENCHMARK(MakeValueFromObject, n) {
 
   for (int i = 0; i < n; ++i) {
     auto val = Value(*rt, obj);
-    folly::doNotOptimizeAway(val);
+    doNotOptimizeAway(val);
   }
 
   // Exclude teardown.
@@ -119,14 +227,14 @@ BENCHMARK(MakeValueFromObject, n) {
 
 BENCHMARK(CallHostFunc1, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   double result = 0.0;
   auto hf = Function::createFromHostFunction(
       *rt,
       PropNameID::forAscii(*rt, "hf"),
       0,
-      [&result](Runtime&, const Value&, const Value* args, size_t) {
+      [&result](Runtime &, const Value &, const Value *args, size_t) {
         result += args[0].getNumber();
         return Value(result);
       });
@@ -136,7 +244,7 @@ BENCHMARK(CallHostFunc1, n) {
   braces.dismiss();
 
   f.call(*rt, hf, (double)n);
-  folly::doNotOptimizeAway(result);
+  doNotOptimizeAway(result);
 
   // Exclude teardown.
   braces.rehire();
@@ -144,14 +252,14 @@ BENCHMARK(CallHostFunc1, n) {
 
 BENCHMARK(CallHostFunc4, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   double result = 0.0;
   auto hf = Function::createFromHostFunction(
       *rt,
       PropNameID::forAscii(*rt, "hf"),
       0,
-      [&result](Runtime&, const Value&, const Value* args, size_t) {
+      [&result](Runtime &, const Value &, const Value *args, size_t) {
         result += args[0].getNumber() + args[1].getNumber() +
             args[2].getNumber() + args[3].getNumber();
         return Value(result);
@@ -162,7 +270,7 @@ BENCHMARK(CallHostFunc4, n) {
   braces.dismiss();
 
   f.call(*rt, hf, (double)n);
-  folly::doNotOptimizeAway(result);
+  doNotOptimizeAway(result);
 
   // Exclude teardown.
   braces.rehire();
@@ -170,8 +278,8 @@ BENCHMARK(CallHostFunc4, n) {
 
 BENCHMARK(CreateHostObj, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   class EmptyHostObject : public HostObject {};
   auto ptr = std::make_shared<EmptyHostObject>();
 
@@ -180,7 +288,7 @@ BENCHMARK(CreateHostObj, n) {
 
   for (int i = 0; i < n; ++i) {
     auto obj = Object::createFromHostObject(*rt, ptr);
-    folly::doNotOptimizeAway(obj);
+    doNotOptimizeAway(obj);
   }
 
   // Exclude teardown.
@@ -189,8 +297,8 @@ BENCHMARK(CreateHostObj, n) {
 
 BENCHMARK(GetJSProp, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   auto f = function(*rt, "(function () { return {foo: 42, bar: 87}; })");
   Object obj = f.call(*rt).getObject(*rt);
   auto foo = PropNameID::forAscii(*rt, "foo");
@@ -200,7 +308,7 @@ BENCHMARK(GetJSProp, n) {
 
   for (int i = 0; i < n; ++i) {
     auto result = obj.getProperty(*rt, foo);
-    folly::doNotOptimizeAway(result);
+    doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
@@ -209,10 +317,10 @@ BENCHMARK(GetJSProp, n) {
 
 BENCHMARK(GetHostProp, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   class SimpleHostObject : public HostObject {
-    Value get(Runtime&, const PropNameID&) override {
+    Value get(Runtime &, const PropNameID &) override {
       return 42;
     }
   };
@@ -232,13 +340,13 @@ BENCHMARK(GetHostProp, n) {
 /// Access properties on a HostObject that keeps them in a JS object.
 BENCHMARK(AccessHostObjectStateInJS, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   struct SimpleHostObject : public HostObject {
     Object jsObj;
-    void* otherStuff;
+    void *otherStuff;
     explicit SimpleHostObject(Object jsObj) : jsObj(std::move(jsObj)) {}
-    Value get(Runtime& runtime, const PropNameID& propName) override {
+    Value get(Runtime &runtime, const PropNameID &propName) override {
       return jsObj.getProperty(runtime, propName);
     }
   };
@@ -263,14 +371,14 @@ BENCHMARK(AccessHostObjectStateInJS, n) {
 /// Access properties on a HostObject that keeps them in C++ fields.
 BENCHMARK(AccessHostObjectStateInNative, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   struct SimpleHostObject : public HostObject {
     int one{1};
     int two{2};
     int three{3};
-    void* otherStuff;
-    Value get(Runtime& runtime, const PropNameID& propName) override {
+    void *otherStuff;
+    Value get(Runtime &runtime, const PropNameID &propName) override {
       auto name = propName.utf8(runtime);
       if (name == "one") {
         return one;
@@ -301,10 +409,10 @@ BENCHMARK(AccessHostObjectStateInNative, n) {
 /// AccessHostObjectStateIn{JS,Native} on a JS object with attached NativeState.
 BENCHMARK(AccessNativeStateObj, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   struct SimpleNativeState : public NativeState {
-    void* otherStuff;
+    void *otherStuff;
   };
   auto factory =
       function(*rt, "(function () { return {one: 1, two: 2, three: 3}; })");
@@ -326,10 +434,10 @@ BENCHMARK(AccessNativeStateObj, n) {
 
 BENCHMARK(SetNativeState, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   struct SimpleNativeState : public NativeState {
-    void* otherStuff;
+    void *otherStuff;
   };
   auto ns = std::make_shared<SimpleNativeState>();
   auto factory =
@@ -350,10 +458,10 @@ BENCHMARK(SetNativeState, n) {
 
 BENCHMARK(GetNativeState, n) {
   // Must be first, to properly exclude setup and teardown.
-  folly::BenchmarkSuspender braces;
-  auto rt = facebook::hermes::makeHermesRuntime();
+  BenchmarkSuspender braces;
+  auto rt = createHermesRuntime();
   struct SimpleNativeState : public NativeState {
-    void* otherStuff;
+    void *otherStuff;
   };
   auto ns = std::make_shared<SimpleNativeState>();
   auto factory =
@@ -366,7 +474,7 @@ BENCHMARK(GetNativeState, n) {
 
   for (int i = 0; i < n; ++i) {
     auto result = obj.getNativeState(*rt);
-    folly::doNotOptimizeAway(result);
+    doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
@@ -375,13 +483,11 @@ BENCHMARK(GetNativeState, n) {
 
 BENCHMARK(ConstructAndDestructRuntime, n) {
   for (int i = 0; i < n; ++i) {
-    auto rt = facebook::hermes::makeHermesRuntime();
-    folly::doNotOptimizeAway(rt);
+    auto rt = createHermesRuntime();
+    doNotOptimizeAway(rt);
   }
 }
 
-int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
-  folly::runBenchmarks();
+int main(int argc, char **argv) {
   return 0;
 }
