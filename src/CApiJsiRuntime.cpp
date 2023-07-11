@@ -34,21 +34,21 @@ const jsi::JSError &jsError) {                                        \
 
 static constexpr size_t MaxCallArgCount = 32;
 
-// Forward declare the facebook::jsi::Runtime implementation on top of ABI-safe JsiRuntime.
+// Forward declare the jsi::Runtime implementation on top of ABI-safe JsiRuntime.
 struct CApiJsiRuntime;
 
-// // An ABI-safe wrapper for facebook::jsi::Buffer.
+// // An ABI-safe wrapper for jsi::Buffer.
 // struct JsiByteBufferWrapper : implements<JsiByteBufferWrapper, IJsiByteBuffer> {
-//   JsiByteBufferWrapper(JsiRuntime const &runtime, std::shared_ptr<facebook::jsi::Buffer const> const &buffer)
+//   JsiByteBufferWrapper(JsiRuntime const &runtime, std::shared_ptr<jsi::Buffer const> const &buffer)
 //   noexcept; ~JsiByteBufferWrapper() noexcept; uint32_t Size(); void GetData(JsiByteArrayUser const &useBytes);
 
 //  private:
 //   JsiRuntime m_runtime;
-//   std::shared_ptr<facebook::jsi::Buffer const> m_buffer;
+//   std::shared_ptr<jsi::Buffer const> m_buffer;
 // };
 
 // // A wrapper for ABI-safe JsiPreparedJavaScript.
-// struct JsiPreparedJavaScriptWrapper : facebook::jsi::PreparedJavaScript {
+// struct JsiPreparedJavaScriptWrapper : jsi::PreparedJavaScript {
 //   JsiPreparedJavaScriptWrapper(JsiPreparedJavaScript const &preparedScript) noexcept;
 //   ~JsiPreparedJavaScriptWrapper() noexcept;
 //   JsiPreparedJavaScript const &Get() const noexcept;
@@ -57,7 +57,7 @@ struct CApiJsiRuntime;
 //   JsiPreparedJavaScript m_preparedScript;
 // };
 
-// An ABI-safe wrapper for facebook::jsi::HostObject.
+// An ABI-safe wrapper for jsi::HostObject.
 struct JsiHostObjectWrapper : JsiHostObject {
   JsiHostObjectWrapper(std::shared_ptr<jsi::HostObject> hostObject) noexcept;
 
@@ -75,7 +75,7 @@ struct JsiHostObjectWrapper : JsiHostObject {
   std::shared_ptr<jsi::HostObject> hostObject_;
 };
 
-// The function object that wraps up the facebook::jsi::HostFunctionType
+// The function object that wraps up the jsi::HostFunctionType
 // struct JsiHostFunctionWrapper : JsiHostFunction {
 //   // We only support new and move constructors.
 //   JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept;
@@ -103,21 +103,19 @@ struct CApiJsiRuntime : jsi::Runtime {
   // Get CApiJsiRuntime from JsiRuntime in current thread.
   static CApiJsiRuntime *getFromJsiRuntime(const JsiRuntime &runtime) noexcept;
 
-  facebook::jsi::Value evaluateJavaScript(
-      const std::shared_ptr<const facebook::jsi::Buffer> &buffer,
-      const std::string &sourceURL) override;
-  std::shared_ptr<const facebook::jsi::PreparedJavaScript> prepareJavaScript(
-      const std::shared_ptr<const facebook::jsi::Buffer> &buffer,
+  jsi::Value evaluateJavaScript(const std::shared_ptr<const jsi::Buffer> &buffer, const std::string &sourceURL)
+      override;
+  std::shared_ptr<const jsi::PreparedJavaScript> prepareJavaScript(
+      const std::shared_ptr<const jsi::Buffer> &buffer,
       std::string sourceURL) override;
-  facebook::jsi::Value evaluatePreparedJavaScript(
-      const std::shared_ptr<const facebook::jsi::PreparedJavaScript> &js) override;
+  jsi::Value evaluatePreparedJavaScript(const std::shared_ptr<const jsi::PreparedJavaScript> &js) override;
 #if JSI_VERSION >= 4
   bool drainMicrotasks(int maxMicrotasksHint = -1) override;
 #endif
-  facebook::jsi::Object global() override;
+  jsi::Object global() override;
   std::string description() override;
   bool isInspectable() override;
-  facebook::jsi::Instrumentation &instrumentation() override;
+  jsi::Instrumentation &instrumentation() override;
 
  protected:
   PointerValue *cloneSymbol(const PointerValue *pv) override;
@@ -148,77 +146,71 @@ struct CApiJsiRuntime : jsi::Runtime {
   jsi::String bigintToString(const jsi::BigInt &bigint, int radix) override;
 #endif
 
-  facebook::jsi::String createStringFromAscii(const char *str, size_t length) override;
-  facebook::jsi::String createStringFromUtf8(const uint8_t *utf8, size_t length) override;
-  std::string utf8(const facebook::jsi::String &str) override;
+  jsi::String createStringFromAscii(const char *str, size_t length) override;
+  jsi::String createStringFromUtf8(const uint8_t *utf8, size_t length) override;
+  std::string utf8(const jsi::String &str) override;
 
 #if JSI_VERSION >= 2
   jsi::Value createValueFromJsonUtf8(const uint8_t *json, size_t length) override;
 #endif
 
-  facebook::jsi::Object createObject() override;
-  facebook::jsi::Object createObject(std::shared_ptr<facebook::jsi::HostObject> ho) override;
-  std::shared_ptr<facebook::jsi::HostObject> getHostObject(const facebook::jsi::Object &obj) override;
-  facebook::jsi::HostFunctionType &getHostFunction(const facebook::jsi::Function &func) override;
+  jsi::Object createObject() override;
+  jsi::Object createObject(std::shared_ptr<jsi::HostObject> ho) override;
+  std::shared_ptr<jsi::HostObject> getHostObject(const jsi::Object &obj) override;
+  jsi::HostFunctionType &getHostFunction(const jsi::Function &func) override;
 
 #if JSI_VERSION >= 7
-  bool hasNativeState(const facebook::jsi::Object &) override;
-  std::shared_ptr<facebook::jsi::NativeState> getNativeState(const facebook::jsi::Object &) override;
-  void setNativeState(const facebook::jsi::Object &, std::shared_ptr<facebook::jsi::NativeState> state) override;
+  bool hasNativeState(const jsi::Object &) override;
+  std::shared_ptr<jsi::NativeState> getNativeState(const jsi::Object &) override;
+  void setNativeState(const jsi::Object &, std::shared_ptr<jsi::NativeState> state) override;
 #endif
 
-  facebook::jsi::Value getProperty(const facebook::jsi::Object &obj, const facebook::jsi::PropNameID &name) override;
-  facebook::jsi::Value getProperty(const facebook::jsi::Object &obj, const facebook::jsi::String &name) override;
-  bool hasProperty(const facebook::jsi::Object &obj, const facebook::jsi::PropNameID &name) override;
-  bool hasProperty(const facebook::jsi::Object &obj, const facebook::jsi::String &name) override;
+  jsi::Value getProperty(const jsi::Object &obj, const jsi::PropNameID &name) override;
+  jsi::Value getProperty(const jsi::Object &obj, const jsi::String &name) override;
+  bool hasProperty(const jsi::Object &obj, const jsi::PropNameID &name) override;
+  bool hasProperty(const jsi::Object &obj, const jsi::String &name) override;
   void setPropertyValue(JSI_CONST_10 jsi::Object &obj, const jsi::PropNameID &name, const jsi::Value &value) override;
   void setPropertyValue(JSI_CONST_10 jsi::Object &obj, const jsi::String &name, const jsi::Value &value) override;
 
-  bool isArray(const facebook::jsi::Object &obj) const override;
-  bool isArrayBuffer(const facebook::jsi::Object &obj) const override;
-  bool isFunction(const facebook::jsi::Object &obj) const override;
-  bool isHostObject(const facebook::jsi::Object &obj) const override;
-  bool isHostFunction(const facebook::jsi::Function &func) const override;
-  facebook::jsi::Array getPropertyNames(const facebook::jsi::Object &obj) override;
+  bool isArray(const jsi::Object &obj) const override;
+  bool isArrayBuffer(const jsi::Object &obj) const override;
+  bool isFunction(const jsi::Object &obj) const override;
+  bool isHostObject(const jsi::Object &obj) const override;
+  bool isHostFunction(const jsi::Function &func) const override;
+  jsi::Array getPropertyNames(const jsi::Object &obj) override;
 
-  facebook::jsi::WeakObject createWeakObject(const facebook::jsi::Object &obj) override;
-  facebook::jsi::Value lockWeakObject(JSI_NO_CONST_3 JSI_CONST_10 facebook::jsi::WeakObject &weakObj) override;
+  jsi::WeakObject createWeakObject(const jsi::Object &obj) override;
+  jsi::Value lockWeakObject(JSI_NO_CONST_3 JSI_CONST_10 jsi::WeakObject &weakObj) override;
 
-  facebook::jsi::Array createArray(size_t length) override;
+  jsi::Array createArray(size_t length) override;
 
 #if JSI_VERSION >= 9
   jsi::ArrayBuffer createArrayBuffer(std::shared_ptr<jsi::MutableBuffer> buffer) override;
 #endif
-  size_t size(const facebook::jsi::Array &arr) override;
-  size_t size(const facebook::jsi::ArrayBuffer &arrayBuffer) override;
-  uint8_t *data(const facebook::jsi::ArrayBuffer &arrayBuffer) override;
-  facebook::jsi::Value getValueAtIndex(const facebook::jsi::Array &arr, size_t i) override;
-  void setValueAtIndexImpl(JSI_CONST_10 facebook::jsi::Array &arr, size_t i, const facebook::jsi::Value &value)
-      override;
+  size_t size(const jsi::Array &arr) override;
+  size_t size(const jsi::ArrayBuffer &arrayBuffer) override;
+  uint8_t *data(const jsi::ArrayBuffer &arrayBuffer) override;
+  jsi::Value getValueAtIndex(const jsi::Array &arr, size_t i) override;
+  void setValueAtIndexImpl(JSI_CONST_10 jsi::Array &arr, size_t i, const jsi::Value &value) override;
 
-  facebook::jsi::Function createFunctionFromHostFunction(
-      const facebook::jsi::PropNameID &name,
+  jsi::Function createFunctionFromHostFunction(
+      const jsi::PropNameID &name,
       unsigned int paramCount,
-      facebook::jsi::HostFunctionType func) override;
-  facebook::jsi::Value call(
-      const facebook::jsi::Function &func,
-      const facebook::jsi::Value &jsThis,
-      const facebook::jsi::Value *args,
-      size_t count) override;
-  facebook::jsi::Value
-  callAsConstructor(const facebook::jsi::Function &func, const facebook::jsi::Value *args, size_t count) override;
+      jsi::HostFunctionType func) override;
+  jsi::Value call(const jsi::Function &func, const jsi::Value &jsThis, const jsi::Value *args, size_t count) override;
+  jsi::Value callAsConstructor(const jsi::Function &func, const jsi::Value *args, size_t count) override;
 
   ScopeState *pushScope() override;
   void popScope(ScopeState *scope) override;
 
-  bool strictEquals(const facebook::jsi::Symbol &a, const facebook::jsi::Symbol &b) const override;
+  bool strictEquals(const jsi::Symbol &a, const jsi::Symbol &b) const override;
 #if JSI_VERSION >= 6
-  bool strictEquals(const facebook::jsi::BigInt &a, const facebook::jsi::BigInt &b) const override;
+  bool strictEquals(const jsi::BigInt &a, const jsi::BigInt &b) const override;
 #endif
-  bool strictEquals(const facebook::jsi::String &a, const facebook::jsi::String &b) const override;
-  bool strictEquals(const facebook::jsi::Object &a, const facebook::jsi::Object &b) const override;
+  bool strictEquals(const jsi::String &a, const jsi::String &b) const override;
+  bool strictEquals(const jsi::Object &a, const jsi::Object &b) const override;
 
-  bool instanceOf(const facebook::jsi::Object &o, const facebook::jsi::Function &f) override;
+  bool instanceOf(const jsi::Object &o, const jsi::Function &f) override;
 
   void RethrowJsiError() const;
   void throwJsiError() const;
@@ -241,7 +233,7 @@ struct CApiJsiRuntime : jsi::Runtime {
   static const JsiWeakObject *asJsiWeakObject(const jsi::WeakObject &weakObject) noexcept;
   static JsiValue asJsiValue(const jsi::Value &value) noexcept;
 
-  //   static JsiPropertyIdRef DetachJsiPropertyIdRef(facebook::jsi::PropNameID &&propertyId) noexcept;
+  //   static JsiPropertyIdRef DetachJsiPropertyIdRef(jsi::PropNameID &&propertyId) noexcept;
   static JsiValue detachJsiValue(jsi::Value &&value) noexcept;
 
  private: // Convert ABI-safe JSI to JSI values
@@ -322,37 +314,37 @@ struct CApiJsiRuntime : jsi::Runtime {
   // struct ValueRef {
   //   ValueRef(JsiValue const &data) noexcept;
   //   ~ValueRef() noexcept;
-  //   operator facebook::jsi::Value const &() const noexcept;
+  //   operator jsi::Value const &() const noexcept;
 
   //   using StoreType = std::aligned_storage_t<sizeof(DataPointerValue)>;
-  //   static void InitValueRef(JsiValue const &data, facebook::jsi::Value *value, StoreType *store) noexcept;
+  //   static void InitValueRef(JsiValue const &data, jsi::Value *value, StoreType *store) noexcept;
 
   //  private:
   //   StoreType m_pointerStore{};
-  //   facebook::jsi::Value m_value{};
+  //   jsi::Value m_value{};
   // };
 
   // struct ValueRefArray {
   //   ValueRefArray(array_view<JsiValue const> args) noexcept;
-  //   facebook::jsi::Value const *Data() const noexcept;
+  //   jsi::Value const *Data() const noexcept;
   //   size_t Size() const noexcept;
 
   //  private:
   //   std::array<ValueRef::StoreType, MaxCallArgCount> m_pointerStoreArray{};
-  //   std::array<facebook::jsi::Value, MaxCallArgCount> m_valueArray{};
+  //   std::array<jsi::Value, MaxCallArgCount> m_valueArray{};
   //   size_t m_size{};
   // };
 
   // struct PropNameIDRef {
   //   PropNameIDRef(JsiPropertyIdRef const &data) noexcept;
   //   ~PropNameIDRef() noexcept;
-  //   operator facebook::jsi::PropNameID const &() const noexcept;
+  //   operator jsi::PropNameID const &() const noexcept;
 
   //   using StoreType = std::aligned_storage_t<sizeof(DataPointerValue)>;
 
   //  private:
   //   StoreType m_pointerStore{};
-  //   facebook::jsi::PropNameID m_propertyId;
+  //   jsi::PropNameID m_propertyId;
   // };
 
  private:
@@ -366,10 +358,10 @@ struct CApiJsiRuntime : jsi::Runtime {
 //===========================================================================
 
 // TODO:
-//  struct AbiJSError : facebook::jsi::JSError {
+//  struct AbiJSError : jsi::JSError {
 //    AbiJSError(CApiJsiRuntime &rt, JsiError &&jsiError) noexcept
-//        : facebook::jsi::
-//              JSError{to_string(jsiError.ErrorDetails()), rt, facebook::jsi::Value(rt,
+//        : jsi::
+//              JSError{to_string(jsiError.ErrorDetails()), rt, jsi::Value(rt,
 //              CApiJsiRuntime::ValueRef(jsiError.Value()))},
 //          m_jsiError{std::move(jsiError)} {}
 
@@ -381,9 +373,9 @@ struct CApiJsiRuntime : jsi::Runtime {
 // AbiJSINativeException implementation
 //===========================================================================
 
-// struct AbiJSINativeException : facebook::jsi::JSINativeException {
+// struct AbiJSINativeException : jsi::JSINativeException {
 //   AbiJSINativeException(JsiError &&jsiError) noexcept
-//       : facebook::jsi::JSINativeException{to_string(jsiError.ErrorDetails())}, m_jsiError{std::move(jsiError)} {}
+//       : jsi::JSINativeException{to_string(jsiError.ErrorDetails())}, m_jsiError{std::move(jsiError)} {}
 
 //  private:
 //   JsiError m_jsiError;
@@ -1375,7 +1367,7 @@ jsi::Function CApiJsiRuntime::makeFunction(JsiObject *func) noexcept {
 //   }
 // }
 
-// facebook::jsi::Value const *CApiJsiRuntime::ValueRefArray::Data() const noexcept {
+// jsi::Value const *CApiJsiRuntime::ValueRefArray::Data() const noexcept {
 //   return m_valueArray.data();
 // }
 
@@ -1392,7 +1384,7 @@ jsi::Function CApiJsiRuntime::makeFunction(JsiObject *func) noexcept {
 
 // CApiJsiRuntime::PropNameIDRef::~PropNameIDRef() noexcept {}
 
-// CApiJsiRuntime::PropNameIDRef::operator facebook::jsi::PropNameID const &() const noexcept {
+// CApiJsiRuntime::PropNameIDRef::operator jsi::PropNameID const &() const noexcept {
 //   return m_propertyId;
 // }
 
