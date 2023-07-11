@@ -298,8 +298,8 @@ class NodeApiJsiRuntime : public jsi::Runtime {
 
    private:
     NodeApiJsiRuntime &runtime_;
-    NodeApiEnvScope envScope_;
-    ScopeState *scopeState_{};
+    // NodeApiEnvScope envScope_;
+    // ScopeState *scopeState_{};
   };
 
   // RAII class to open and close the environment scope.
@@ -795,6 +795,16 @@ class NodeApiJsiRuntime : public jsi::Runtime {
   std::vector<NodeApiStackValueHolder> stackValues_;
   std::vector<NodeApiRefHolder> refs_;
 
+  struct Slot {
+    uint64_t entry1;
+    uint64_t entry2;
+    uint64_t entry3;
+    uint64_t entry4;
+  };
+
+  size_t slotId_{0};
+  std::array<Slot, 1024> slots_;
+
   // TODO: implement GC for propNameIDs_
   std::unordered_map<StringKey, NodeApiRefHolder, StringKey::Hash, StringKey::EqualTo> propNameIDs_;
 
@@ -864,6 +874,8 @@ bool StringKey::EqualTo::operator()(const StringKey &left, const StringKey &righ
 
 NodeApiJsiRuntime::NodeApiJsiRuntime(napi_env env, JSRuntimeApi *jsrApi, std::function<void()> onDelete) noexcept
     : env_(env), jsrApi_(jsrApi), onDelete_(std::move(onDelete)) {
+  stackValues_.reserve(1024);
+
   NodeApiScope scope{*this};
   propertyId_.Error = makeNodeApiRef(getPropertyIdFromName("Error"), NodeApiPointerValueKind::String);
   propertyId_.Object = makeNodeApiRef(getPropertyIdFromName("Object"), NodeApiPointerValueKind::String);
@@ -1516,9 +1528,10 @@ jsi::Function NodeApiJsiRuntime::createFunctionFromHostFunction(
 
 jsi::Value
 NodeApiJsiRuntime::call(const jsi::Function &func, const jsi::Value &jsThis, const jsi::Value *args, size_t count) {
-  NodeApiScope scope{*this};
+  // NodeApiScope scope{*this};
   return toJsiValue(callFunction(
       getNodeApiValue(jsThis), getNodeApiValue(func), NodeApiValueArgs(*this, span<const jsi::Value>(args, count))));
+  // return jsi::Value();
 }
 
 jsi::Value NodeApiJsiRuntime::callAsConstructor(const jsi::Function &func, const jsi::Value *args, size_t count) {
@@ -1576,10 +1589,10 @@ NodeApiJsiRuntime::NodeApiScope::NodeApiScope(const NodeApiJsiRuntime &runtime) 
     : NodeApiScope(const_cast<NodeApiJsiRuntime &>(runtime)) {}
 
 NodeApiJsiRuntime::NodeApiScope::NodeApiScope(NodeApiJsiRuntime &runtime) noexcept
-    : runtime_(runtime), envScope_(runtime_.getEnv()), scopeState_(runtime_.pushScope()) {}
+    : runtime_(runtime) {} //, envScope_(runtime_.getEnv()), scopeState_(runtime_.pushScope()) {}
 
 NodeApiJsiRuntime::NodeApiScope::~NodeApiScope() noexcept {
-  runtime_.popScope(scopeState_);
+  // runtime_.popScope(scopeState_);
 }
 
 //=====================================================================================================================
@@ -1648,7 +1661,10 @@ NodeApiJsiRuntime::NodeApiRefCountedPointerValue::NodeApiRefCountedPointerValue(
     napi_value value,
     NodeApiJsiRuntime::NodeApiPointerValueKind pointerKind,
     int32_t initialRefCount) {
-  NodeApiRefCountedPointerValue *result = new NodeApiRefCountedPointerValue(value, pointerKind, initialRefCount);
+  static_assert(sizeof(NodeApiRefCountedPointerValue) == sizeof(NodeApiJsiRuntime::Slot));
+  runtime.slotId_++;
+  NodeApiRefCountedPointerValue *result = new (std::addressof(runtime.slots_[runtime.slotId_]))
+      NodeApiRefCountedPointerValue(value, pointerKind, initialRefCount);
   runtime.addStackValue(NodeApiStackValueHolder(result));
   return result;
 }
@@ -1762,7 +1778,8 @@ void NodeApiJsiRuntime::NodeApiRefCountedPointerValue::decRefCount() const noexc
   int32_t count = refCount_.fetch_sub(1, std::memory_order_release) - 1;
   if (count == 0) {
     std::atomic_thread_fence(std::memory_order_acquire);
-    delete this;
+    // delete this;
+    // this->~NodeApiRefCountedPointerValue();
   }
 }
 
@@ -1809,7 +1826,7 @@ size_t NodeApiJsiRuntime::SmallBuffer<T, InplaceSize>::size() const noexcept {
 NodeApiJsiRuntime::NodeApiValueArgs::NodeApiValueArgs(NodeApiJsiRuntime &runtime, span<const jsi::Value> args)
     : args_{args.size()} {
   napi_value *jsArgs = args_.data();
-  for (size_t i = 0; i < args.size(); ++i) {
+  for (size_t i = 0, size = args.size(); i < size; ++i) {
     jsArgs[i] = runtime.getNodeApiValue(args[i]);
   }
 }

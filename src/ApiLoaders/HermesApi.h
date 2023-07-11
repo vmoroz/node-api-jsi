@@ -6,6 +6,7 @@
 #define APILOADERS_HERMESAPI_H_
 
 #include <hermes/hermes_api.h>
+#include <hermes/hermes_jsi.h>
 #include "JSRuntimeApi.h"
 
 namespace Microsoft::NodeApiJsi {

@@ -23,6 +23,8 @@ add_executable(jsi_tests
   "../src/ApiLoaders/NodeApi.h"
   "../src/ApiLoaders/V8Api.cpp"
   "../src/ApiLoaders/V8Api.h"
+  "../src/CApiJsiRuntime.cpp"
+  "../src/CApiJsiRuntime.h"
   "../src/NodeApiJsiRuntime.cpp"
   "../src/NodeApiJsiRuntime.h"
   "JsiRuntimeTests.cpp"
@@ -47,15 +49,15 @@ execute_process(
 
 target_link_libraries(jsi_tests PRIVATE ${CMAKE_BINARY_DIR}/packages/Microsoft.JavaScript.Hermes/build/native/Microsoft.JavaScript.Hermes.targets)
 
-execute_process(
-  COMMAND ${NUGET_EXE}
-    install "ReactNative.V8Jsi.Windows"
-    -Version 0.71.5
-    -ExcludeVersion
-    -OutputDirectory ${CMAKE_BINARY_DIR}/packages
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+# execute_process(
+#   COMMAND ${NUGET_EXE}
+#     install "ReactNative.V8Jsi.Windows"
+#     -Version 0.71.5
+#     -ExcludeVersion
+#     -OutputDirectory ${CMAKE_BINARY_DIR}/packages
+#   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(jsi_tests PRIVATE ${CMAKE_BINARY_DIR}/packages/ReactNative.V8Jsi.Windows/build/native/ReactNative.V8Jsi.Windows.targets)
+# target_link_libraries(jsi_tests PRIVATE ${CMAKE_BINARY_DIR}/packages/ReactNative.V8Jsi.Windows/build/native/ReactNative.V8Jsi.Windows.targets)
 
 enable_testing()
 

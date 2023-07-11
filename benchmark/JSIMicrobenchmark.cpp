@@ -139,14 +139,16 @@ BENCHMARK(CallJSFunc1, n) {
   braces.dismiss();
 
   for (int i = 0; i < n; ++i) {
+    //result = Value(result).getNumber();
     result = f.call(*rt, result).getNumber();
+    //result = f.call(*rt).getNumber();
     doNotOptimizeAway(result);
   }
 
   // Exclude teardown.
   braces.rehire();
 }
-
+#if 0
 BENCHMARK(CallJSFunc4, n) {
   // Must be first, to properly exclude setup and teardown.
   BenchmarkSuspender braces;
@@ -487,6 +489,7 @@ BENCHMARK(ConstructAndDestructRuntime, n) {
     doNotOptimizeAway(rt);
   }
 }
+#endif
 
 int main(int argc, char **argv) {
   return 0;
