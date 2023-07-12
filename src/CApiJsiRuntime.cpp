@@ -820,58 +820,38 @@ void CApiJsiRuntime::setNativeState(const jsi::Object &obj, std::shared_ptr<jsi:
 #endif
 
 jsi::Value CApiJsiRuntime::getProperty(const jsi::Object &obj, const jsi::PropNameID &name) {
-  //   return makeValue(m_runtime.GetProperty(asJsiObject(obj), AsJsiPropertyIdRef(name)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  THROW_ON_ERROR(runtime_.getProperty(asJsiObject(obj), asJsiPropNameID(name), &result));
+  return makeValue(result);
 }
 
 jsi::Value CApiJsiRuntime::getProperty(const jsi::Object &obj, const jsi::String &name) {
-  //   // TODO: delete name
-  //   auto name = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
-  //   return makeValue(m_runtime.GetProperty(asJsiObject(obj), name));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  THROW_ON_ERROR(runtime_.getPropertyWithStringKey(asJsiObject(obj), asJsiString(name), &result));
+  return makeValue(result);
 }
 
 bool CApiJsiRuntime::hasProperty(const jsi::Object &obj, const jsi::PropNameID &name) {
-  //   return m_runtime.HasProperty(asJsiObject(obj), AsJsiPropertyIdRef(name));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.hasProperty(asJsiObject(obj), asJsiPropNameID(name), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::hasProperty(const jsi::Object &obj, const jsi::String &name) {
-  //   // TODO: delete name
-  //   auto name = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
-  //   return m_runtime.HasProperty(asJsiObject(obj), name);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.hasPropertyWithStringKey(asJsiObject(obj), asJsiString(name), &result));
+  return result;
 }
 
 void CApiJsiRuntime::setPropertyValue(
     JSI_CONST_10 jsi::Object &obj,
     const jsi::PropNameID &name,
     const jsi::Value &value) {
-  //   m_runtime.SetProperty(asJsiObject(obj), AsJsiPropertyIdRef(name), AsJsiValueRef(value));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
+  THROW_ON_ERROR(runtime_.setProperty(asJsiObject(obj), asJsiPropNameID(name), &asJsiValue(value)));
 }
 
 void CApiJsiRuntime::setPropertyValue(JSI_CONST_10 jsi::Object &obj, const jsi::String &name, const jsi::Value &value) {
-  //   // TODO: delete name
-  //   auto name = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
-  //   m_runtime.SetProperty(asJsiObject(obj), name, AsJsiValueRef(value));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
+  THROW_ON_ERROR(runtime_.setPropertyWithStringKey(asJsiObject(obj), asJsiString(name), &asJsiValue(value)));
 }
 
 bool CApiJsiRuntime::isArray(const jsi::Object &obj) const {
