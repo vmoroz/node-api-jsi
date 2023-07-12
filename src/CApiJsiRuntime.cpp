@@ -77,7 +77,7 @@ struct JsiHostObjectWrapper : JsiHostObject {
 // The function object that wraps up the jsi::HostFunctionType
 struct JsiHostFunctionWrapper : JsiHostFunction {
   JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept;
-  const jsi::HostFunctionType &hostFunction() noexcept;
+  jsi::HostFunctionType &hostFunction() noexcept;
 
  private:
   static const JsiHostFunctionVTable *getVTable() noexcept;
@@ -486,7 +486,7 @@ JsiHostObjectWrapper::set(JsiHostObject *hostObject, JsiRuntime *runtime, JsiPro
 JsiHostFunctionWrapper::JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept
     : JsiHostFunction(getVTable()), hostFunction_(std::move(hostFunction)) {}
 
-const jsi::HostFunctionType &JsiHostFunctionWrapper::hostFunction() noexcept {
+jsi::HostFunctionType &JsiHostFunctionWrapper::hostFunction() noexcept {
   return hostFunction_;
 }
 
@@ -804,11 +804,9 @@ std::shared_ptr<jsi::HostObject> CApiJsiRuntime::getHostObject(const jsi::Object
 }
 
 jsi::HostFunctionType &CApiJsiRuntime::getHostFunction(const jsi::Function &func) {
-  // JsiHostFunction *hostFunction;
-  // THROW_ON_ERROR(runtime_.getHostFunction(asJsiObject(func), &hostFunction));
-  //  return static_cast<JsiHostFunctionWrapper*>(hostFunction)->hostFunction();
-  static jsi::HostFunctionType x;
-  return x;
+  JsiHostFunction *hostFunction;
+  THROW_ON_ERROR(runtime_.getHostFunction(asJsiObject(func), &hostFunction));
+  return static_cast<JsiHostFunctionWrapper *>(hostFunction)->hostFunction();
 }
 
 #if JSI_VERSION >= 7
