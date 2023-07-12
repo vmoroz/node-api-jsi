@@ -224,34 +224,35 @@ struct CApiJsiRuntime : jsi::Runtime {
   static const JsiString *asJsiString(const PointerValue *pv) noexcept;
   static const JsiObject *asJsiObject(const PointerValue *pv) noexcept;
   static const JsiPropNameID *asJsiPropNameID(const PointerValue *pv) noexcept;
+  static const JsiWeakObject *asJsiWeakObject(const PointerValue *pv) noexcept;
 
   static const JsiSymbol *asJsiSymbol(const jsi::Symbol &symbol) noexcept;
   static const JsiBigInt *asJsiBigInt(const jsi::BigInt &bigInt) noexcept;
   static const JsiString *asJsiString(const jsi::String &str) noexcept;
   static const JsiObject *asJsiObject(const jsi::Object &obj) noexcept;
-  static const JsiPropNameID *asJsiPropNameID(const jsi::PropNameID &propertyId) noexcept;
+  static const JsiPropNameID *asJsiPropNameID(const jsi::PropNameID &name) noexcept;
   static const JsiWeakObject *asJsiWeakObject(const jsi::WeakObject &weakObject) noexcept;
   static JsiValue asJsiValue(const jsi::Value &value) noexcept;
 
-  //   static JsiPropertyIdRef DetachJsiPropertyIdRef(jsi::PropNameID &&propertyId) noexcept;
+  //   static JsiPropertyIdRef DetachJsiPropertyIdRef(jsi::PropNameID &&name) noexcept;
   static JsiValue detachJsiValue(jsi::Value &&value) noexcept;
 
  private: // Convert ABI-safe JSI to JSI values
-  static PointerValue *makeSymbolValue(JsiSymbol *symbol) noexcept;
-  static PointerValue *makeBigIntValue(JsiBigInt *bigInt) noexcept;
-  static PointerValue *makeStringValue(JsiString *str) noexcept;
-  static PointerValue *makeObjectValue(JsiObject *obj) noexcept;
-  static PointerValue *makeObjectValue(JsiWeakObject *obj) noexcept;
-  static PointerValue *makePropNameIDValue(JsiPropNameID *propertyId) noexcept;
+  static PointerValue *asPointerValue(JsiSymbol *symbol) noexcept;
+  static PointerValue *asPointerValue(JsiBigInt *bigInt) noexcept;
+  static PointerValue *asPointerValue(JsiString *str) noexcept;
+  static PointerValue *asPointerValue(JsiObject *obj) noexcept;
+  static PointerValue *asPointerValue(JsiPropNameID *name) noexcept;
+  static PointerValue *asPointerValue(JsiWeakObject *obj) noexcept;
 
   static jsi::Symbol makeSymbol(JsiSymbol *symbol) noexcept;
   static jsi::BigInt makeBigInt(JsiBigInt *bigInt) noexcept;
   static jsi::String makeString(JsiString *str) noexcept;
   static jsi::Object makeObject(JsiObject *obj) noexcept;
-  static jsi::PropNameID makePropNameID(JsiPropNameID *propertyId) noexcept;
+  static jsi::PropNameID makePropNameID(JsiPropNameID *name) noexcept;
+  jsi::WeakObject makeWeakObject(JsiWeakObject *weakObject) const noexcept;
   jsi::Array makeArray(JsiObject *arr) noexcept;
   jsi::ArrayBuffer makeArrayBuffer(JsiObject *arr) noexcept;
-  jsi::WeakObject makeWeakObject(JsiWeakObject *weakObject) const noexcept;
   jsi::Function makeFunction(JsiObject *func) noexcept;
   static jsi::Value makeValue(JsiValue &value) noexcept;
 
@@ -301,7 +302,7 @@ struct CApiJsiRuntime : jsi::Runtime {
   //   };
 
   //   struct PropNameIDPointerValue : DataPointerValue {
-  //     PropNameIDPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiPropertyIdRef &&propertyId) noexcept;
+  //     PropNameIDPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiPropertyIdRef &&name) noexcept;
   //     void invalidate() override;
   //     static JsiPropertyIdRef const &GetData(PointerValue const *pv) noexcept;
   //     static JsiPropertyIdRef Detach(PointerValue const *pv) noexcept;
@@ -623,31 +624,31 @@ jsi::Instrumentation &CApiJsiRuntime::instrumentation() {
 jsi::Runtime::PointerValue *CApiJsiRuntime::cloneSymbol(const jsi::Runtime::PointerValue *pv) {
   JsiSymbol *result{};
   THROW_ON_ERROR(runtime_.cloneSymbol(asJsiSymbol(pv), &result));
-  return makeSymbolValue(result);
+  return asPointerValue(result);
 }
 
 jsi::Runtime::PointerValue *CApiJsiRuntime::cloneBigInt(const jsi::Runtime::PointerValue *pv) {
   JsiBigInt *result{};
   THROW_ON_ERROR(runtime_.cloneBigInt(asJsiBigInt(pv), &result));
-  return makeBigIntValue(result);
+  return asPointerValue(result);
 }
 
 jsi::Runtime::PointerValue *CApiJsiRuntime::cloneString(const jsi::Runtime::PointerValue *pv) {
   JsiString *result{};
   THROW_ON_ERROR(runtime_.cloneString(asJsiString(pv), &result));
-  return makeStringValue(result);
+  return asPointerValue(result);
 }
 
 jsi::Runtime::PointerValue *CApiJsiRuntime::cloneObject(const jsi::Runtime::PointerValue *pv) {
   JsiObject *result{};
   THROW_ON_ERROR(runtime_.cloneObject(asJsiObject(pv), &result));
-  return makeObjectValue(result);
+  return asPointerValue(result);
 }
 
 jsi::Runtime::PointerValue *CApiJsiRuntime::clonePropNameID(const jsi::Runtime::PointerValue *pv) {
   JsiPropNameID *result{};
   THROW_ON_ERROR(runtime_.clonePropNameID(asJsiPropNameID(pv), &result));
-  return makePropNameIDValue(result);
+  return asPointerValue(result);
 }
 
 jsi::PropNameID CApiJsiRuntime::createPropNameIDFromAscii(const char *str, size_t length) {
@@ -676,10 +677,10 @@ jsi::PropNameID CApiJsiRuntime::createPropNameIDFromSymbol(const jsi::Symbol &sy
 }
 #endif
 
-std::string CApiJsiRuntime::utf8(const jsi::PropNameID &propertyId) {
+std::string CApiJsiRuntime::utf8(const jsi::PropNameID &name) {
   std::string result;
   THROW_ON_ERROR(runtime_.propNameIDToUtf8(
-      asJsiPropNameID(propertyId),
+      asJsiPropNameID(name),
       [](const uint8_t *utf8, size_t size, void *receiver) {
         reinterpret_cast<std::string *>(receiver)->assign(reinterpret_cast<char const *>(utf8), size);
       },
@@ -800,33 +801,21 @@ jsi::HostFunctionType &CApiJsiRuntime::getHostFunction(const jsi::Function &func
 
 #if JSI_VERSION >= 7
 bool CApiJsiRuntime::hasNativeState(const jsi::Object &obj) {
-  //   // TODO: implement
-  //   UNREFERENCED_PARAMETER(obj);
-  //   VerifyElseCrash(false);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.hasNativeState(asJsiObject(obj), &result));
+  return result;
 }
 
 std::shared_ptr<jsi::NativeState> CApiJsiRuntime::getNativeState(const jsi::Object &obj) {
-  //   // TODO: implement
-  //   UNREFERENCED_PARAMETER(obj);
-  //   VerifyElseCrash(false);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return nullptr;
+  JsiNativeState result;
+  THROW_ON_ERROR(runtime_.getNativeState(asJsiObject(obj), &result));
+  return result ? *reinterpret_cast<std::shared_ptr<jsi::NativeState> *>(result) : nullptr;
 }
 
 void CApiJsiRuntime::setNativeState(const jsi::Object &obj, std::shared_ptr<jsi::NativeState> state) {
-  //   // TODO: implement
-  //   UNREFERENCED_PARAMETER(obj);
-  //   UNREFERENCED_PARAMETER(state);
-  //   VerifyElseCrash(false);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
+  auto *ptr = reinterpret_cast<JsiNativeState>(new std::shared_ptr<jsi::NativeState>(std::move(state)));
+  THROW_ON_ERROR(runtime_.setNativeState(
+      asJsiObject(obj), ptr, [](void *data) { delete reinterpret_cast<std::shared_ptr<jsi::NativeState> *>(data); }));
 }
 #endif
 
@@ -839,9 +828,9 @@ jsi::Value CApiJsiRuntime::getProperty(const jsi::Object &obj, const jsi::PropNa
 }
 
 jsi::Value CApiJsiRuntime::getProperty(const jsi::Object &obj, const jsi::String &name) {
-  //   // TODO: delete propertyId
-  //   auto propertyId = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
-  //   return makeValue(m_runtime.GetProperty(asJsiObject(obj), propertyId));
+  //   // TODO: delete name
+  //   auto name = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
+  //   return makeValue(m_runtime.GetProperty(asJsiObject(obj), name));
   // } catch (hresult_error const &) {
   //   RethrowJsiError();
   //   throw;
@@ -857,9 +846,9 @@ bool CApiJsiRuntime::hasProperty(const jsi::Object &obj, const jsi::PropNameID &
 }
 
 bool CApiJsiRuntime::hasProperty(const jsi::Object &obj, const jsi::String &name) {
-  //   // TODO: delete propertyId
-  //   auto propertyId = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
-  //   return m_runtime.HasProperty(asJsiObject(obj), propertyId);
+  //   // TODO: delete name
+  //   auto name = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
+  //   return m_runtime.HasProperty(asJsiObject(obj), name);
   // } catch (hresult_error const &) {
   //   RethrowJsiError();
   //   throw;
@@ -877,9 +866,9 @@ void CApiJsiRuntime::setPropertyValue(
 }
 
 void CApiJsiRuntime::setPropertyValue(JSI_CONST_10 jsi::Object &obj, const jsi::String &name, const jsi::Value &value) {
-  //   // TODO: delete propertyId
-  //   auto propertyId = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
-  //   m_runtime.SetProperty(asJsiObject(obj), propertyId, AsJsiValueRef(value));
+  //   // TODO: delete name
+  //   auto name = m_runtime.CreatePropertyIdFromString(AsJsiStringRef(name));
+  //   m_runtime.SetProperty(asJsiObject(obj), name, AsJsiValueRef(value));
   // } catch (hresult_error const &) {
   //   RethrowJsiError();
   //   throw;
@@ -1178,6 +1167,10 @@ void CApiJsiRuntime::setJsiError(const std::exception &nativeException) noexcept
   return reinterpret_cast<const JsiPropNameID *>(pv);
 }
 
+/*static*/ const JsiWeakObject *CApiJsiRuntime::asJsiWeakObject(const jsi::Runtime::PointerValue *pv) noexcept {
+  return reinterpret_cast<const JsiWeakObject *>(pv);
+}
+
 /*static*/ const JsiSymbol *CApiJsiRuntime::asJsiSymbol(const jsi::Symbol &symbol) noexcept {
   return asJsiSymbol(getPointerValue(symbol));
 }
@@ -1194,13 +1187,12 @@ void CApiJsiRuntime::setJsiError(const std::exception &nativeException) noexcept
   return asJsiObject(getPointerValue(obj));
 }
 
-/*static*/ const JsiPropNameID *CApiJsiRuntime::asJsiPropNameID(const jsi::PropNameID &propertyId) noexcept {
-  return asJsiPropNameID(getPointerValue(propertyId));
+/*static*/ const JsiPropNameID *CApiJsiRuntime::asJsiPropNameID(const jsi::PropNameID &name) noexcept {
+  return asJsiPropNameID(getPointerValue(name));
 }
 
 /*static*/ const JsiWeakObject *CApiJsiRuntime::asJsiWeakObject(const jsi::WeakObject &weakObject) noexcept {
-  // return reinterpret_cast<JsiWeakObjectRef const &>(ObjectPointerValue::GetData(getPointerValue(weakObject)));
-  return nullptr;
+  return asJsiWeakObject(getPointerValue(weakObject));
 }
 
 /*static*/ JsiValue CApiJsiRuntime::asJsiValue(const jsi::Value &value) noexcept {
@@ -1215,10 +1207,10 @@ void CApiJsiRuntime::setJsiError(const std::exception &nativeException) noexcept
   return result;
 }
 
-// /*static*/ JsiPropertyIdRef CApiJsiRuntime::DetachJsiPropertyIdRef(PropNameID &&propertyId) noexcept {
+// /*static*/ JsiPropertyIdRef CApiJsiRuntime::DetachJsiPropertyIdRef(PropNameID &&name) noexcept {
 //   // This method detaches JsiPropertyIdRef from the PropNameID.
 //   // It lets the PropNameIDPointerValue destructor run, but it must not destroy the underlying JS engine object.
-//   return PropNameIDPointerValue::Detach(getPointerValue(propertyId));
+//   return PropNameIDPointerValue::Detach(getPointerValue(name));
 // }
 
 /*static*/ JsiValue CApiJsiRuntime::detachJsiValue(jsi::Value &&value) noexcept {
@@ -1238,48 +1230,52 @@ void CApiJsiRuntime::setJsiError(const std::exception &nativeException) noexcept
   return result;
 }
 
-jsi::Runtime::PointerValue *CApiJsiRuntime::makeSymbolValue(JsiSymbol *symbol) noexcept {
+jsi::Runtime::PointerValue *CApiJsiRuntime::asPointerValue(JsiSymbol *symbol) noexcept {
   return reinterpret_cast<jsi::Runtime::PointerValue *>(symbol);
 }
 
-jsi::Runtime::PointerValue *CApiJsiRuntime::makeBigIntValue(JsiBigInt *bigInt) noexcept {
+jsi::Runtime::PointerValue *CApiJsiRuntime::asPointerValue(JsiBigInt *bigInt) noexcept {
   return reinterpret_cast<jsi::Runtime::PointerValue *>(bigInt);
 }
 
-jsi::Runtime::PointerValue *CApiJsiRuntime::makeStringValue(JsiString *str) noexcept {
+jsi::Runtime::PointerValue *CApiJsiRuntime::asPointerValue(JsiString *str) noexcept {
   return reinterpret_cast<jsi::Runtime::PointerValue *>(str);
 }
 
-jsi::Runtime::PointerValue *CApiJsiRuntime::makeObjectValue(JsiObject *obj) noexcept {
+jsi::Runtime::PointerValue *CApiJsiRuntime::asPointerValue(JsiObject *obj) noexcept {
   return reinterpret_cast<jsi::Runtime::PointerValue *>(obj);
 }
 
-jsi::Runtime::PointerValue *CApiJsiRuntime::makeObjectValue(JsiWeakObject *obj) noexcept {
-  return reinterpret_cast<jsi::Runtime::PointerValue *>(obj);
+jsi::Runtime::PointerValue *CApiJsiRuntime::asPointerValue(JsiPropNameID *name) noexcept {
+  return reinterpret_cast<jsi::Runtime::PointerValue *>(name);
 }
 
-jsi::Runtime::PointerValue *CApiJsiRuntime::makePropNameIDValue(JsiPropNameID *propertyId) noexcept {
-  return reinterpret_cast<jsi::Runtime::PointerValue *>(propertyId);
+jsi::Runtime::PointerValue *CApiJsiRuntime::asPointerValue(JsiWeakObject *obj) noexcept {
+  return reinterpret_cast<jsi::Runtime::PointerValue *>(obj);
 }
 
 jsi::Symbol CApiJsiRuntime::makeSymbol(JsiSymbol *symbol) noexcept {
-  return make<jsi::Symbol>(makeSymbolValue(symbol));
+  return make<jsi::Symbol>(asPointerValue(symbol));
 }
 
 jsi::BigInt CApiJsiRuntime::makeBigInt(JsiBigInt *bigInt) noexcept {
-  return make<jsi::BigInt>(makeBigIntValue(bigInt));
+  return make<jsi::BigInt>(asPointerValue(bigInt));
 }
 
 jsi::String CApiJsiRuntime::makeString(JsiString *str) noexcept {
-  return make<jsi::String>(makeStringValue(str));
+  return make<jsi::String>(asPointerValue(str));
 }
 
 jsi::Object CApiJsiRuntime::makeObject(JsiObject *obj) noexcept {
-  return make<jsi::Object>(makeObjectValue(obj));
+  return make<jsi::Object>(asPointerValue(obj));
 }
 
-jsi::PropNameID CApiJsiRuntime::makePropNameID(JsiPropNameID *propertyId) noexcept {
-  return make<jsi::PropNameID>(makePropNameIDValue(propertyId));
+jsi::PropNameID CApiJsiRuntime::makePropNameID(JsiPropNameID *name) noexcept {
+  return make<jsi::PropNameID>(asPointerValue(name));
+}
+
+jsi::WeakObject CApiJsiRuntime::makeWeakObject(JsiWeakObject *weakObject) const noexcept {
+  return make<jsi::WeakObject>(asPointerValue(weakObject));
 }
 
 jsi::Array CApiJsiRuntime::makeArray(JsiObject *arr) noexcept {
@@ -1288,10 +1284,6 @@ jsi::Array CApiJsiRuntime::makeArray(JsiObject *arr) noexcept {
 
 jsi::ArrayBuffer CApiJsiRuntime::makeArrayBuffer(JsiObject *arr) noexcept {
   return makeObject(arr).getArrayBuffer(*this);
-}
-
-jsi::WeakObject CApiJsiRuntime::makeWeakObject(JsiWeakObject *weakObject) const noexcept {
-  return make<jsi::WeakObject>(makeObjectValue(weakObject));
 }
 
 jsi::Function CApiJsiRuntime::makeFunction(JsiObject *func) noexcept {
