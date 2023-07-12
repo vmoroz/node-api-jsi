@@ -997,18 +997,13 @@ jsi::Value CApiJsiRuntime::callAsConstructor(const jsi::Function &func, const js
 }
 
 jsi::Runtime::ScopeState *CApiJsiRuntime::pushScope() {
-  //   return reinterpret_cast<ScopeState *>(m_runtime.PushScope().Data);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return nullptr;
+  JsiScopeState result;
+  THROW_ON_ERROR(runtime_.pushScope(&result));
+  return reinterpret_cast<jsi::Runtime::ScopeState *>(result);
 }
 
 void CApiJsiRuntime::popScope(jsi::Runtime::ScopeState *scope) {
-  //   m_runtime.PopScope({reinterpret_cast<uint64_t>(scope)});
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
+  THROW_ON_ERROR(runtime_.popScope(reinterpret_cast<JsiScopeState>(scope)));
 }
 
 bool CApiJsiRuntime::strictEquals(const jsi::Symbol &a, const jsi::Symbol &b) const {
