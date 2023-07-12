@@ -60,7 +60,6 @@ struct CApiJsiRuntime;
 // An ABI-safe wrapper for jsi::HostObject.
 struct JsiHostObjectWrapper : JsiHostObject {
   JsiHostObjectWrapper(std::shared_ptr<jsi::HostObject> hostObject) noexcept;
-
   const std::shared_ptr<jsi::HostObject> &hostObject() noexcept;
 
  private:
@@ -76,24 +75,24 @@ struct JsiHostObjectWrapper : JsiHostObject {
 };
 
 // The function object that wraps up the jsi::HostFunctionType
-// struct JsiHostFunctionWrapper : JsiHostFunction {
-//   // We only support new and move constructors.
-//   JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept;
+struct JsiHostFunctionWrapper : JsiHostFunction {
+  JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept;
+  const jsi::HostFunctionType &hostFunction() noexcept;
 
-//   JsiValue operator()(JsiRuntime &runtime, const JsiValue &thisArg, JsiValue* args, size_t argCount);
+ private:
+  static const JsiHostFunctionVTable *getVTable() noexcept;
+  static jsi_status JSICALL destroy(JsiHostFunction *hostFunction);
+  static jsi_status JSICALL invoke(
+      JsiHostFunction *hostFunction,
+      JsiRuntime *runtime,
+      const JsiValue *thisArg,
+      const JsiValue *args,
+      size_t argCount,
+      JsiValue *result);
 
-//   const jsi::HostFunctionType &hostFunction() noexcept;
-
-// private:
-//   // static const JsiHostObjectVTable *getVTable() noexcept;
-//   // static jsi_status JSICALL destroy(JsiHostFunction *hostFunction);
-//   // static jsi_status JSICALL get(JsiHostObject *hostObject, JsiRuntime *runtime, JsiPropNameID *name, JsiValue
-//   *result);
-
-//  private:
-//   jsi::HostFunctionType hostFunction_;
-//   JsiObject* functionData_{};
-// };
+ private:
+  jsi::HostFunctionType hostFunction_;
+};
 
 // JSI runtime implementation as a wrapper for the ABI-safe JsiRuntime.
 struct CApiJsiRuntime : jsi::Runtime {
@@ -484,27 +483,40 @@ JsiHostObjectWrapper::set(JsiHostObject *hostObject, JsiRuntime *runtime, JsiPro
 // JsiHostFunctionWrapper implementation
 //===========================================================================
 
-// JsiHostFunctionWrapper::JsiHostFunctionWrapper(HostFunctionType &&hostFunction) noexcept
-//     : m_hostFunction{std::move(hostFunction)} {}
+JsiHostFunctionWrapper::JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept
+    : JsiHostFunction(getVTable()), hostFunction_(std::move(hostFunction)) {}
 
-// JsiValue JsiHostFunctionWrapper::operator()(
-//     JsiRuntime const &runtime,
-//     JsiValue const &thisArg,
-//     array_view<JsiValue const> args) try {
-//   CApiJsiRuntime *rt{CApiJsiRuntime::GetFromJsiRuntime(runtime)};
-//   CApiJsiRuntime::ValueRefArray valueRefArgs{args};
-//   return CApiJsiRuntime::DetachJsiValueRef(
-//       m_hostFunction(*rt, CApiJsiRuntime::ValueRef{thisArg}, valueRefArgs.Data(), valueRefArgs.Size()));
-// } catch (JSI_RUNTIME_SET_ERROR(runtime)) {
-//   throw;
-// }
+const jsi::HostFunctionType &JsiHostFunctionWrapper::hostFunction() noexcept {
+  return hostFunction_;
+}
 
-// /*static*/ HostFunctionType &JsiHostFunctionWrapper::GetHostFunction(JsiHostFunction const &hostFunction) noexcept {
-//   void *hostFunctionAbi = get_abi(hostFunction);
-//   JsiHostFunctionWrapper *self =
-//       static_cast<impl::delegate<JsiHostFunction, JsiHostFunctionWrapper> *>(hostFunctionAbi);
-//   return self->m_hostFunction;
-// }
+/*static*/ const JsiHostFunctionVTable *JsiHostFunctionWrapper::getVTable() noexcept {
+  static JsiHostFunctionVTable vtable{destroy, invoke};
+  return &vtable;
+}
+
+/*static*/ jsi_status JSICALL JsiHostFunctionWrapper::destroy(JsiHostFunction *hostFunction) {
+  delete static_cast<JsiHostFunctionWrapper *>(hostFunction);
+  return jsi_status_ok;
+}
+
+/*static*/ jsi_status JSICALL JsiHostFunctionWrapper::invoke(
+    JsiHostFunction *hostFunction,
+    JsiRuntime *runtime,
+    const JsiValue *thisArg,
+    const JsiValue *args,
+    size_t argCount,
+    JsiValue *result) try {
+  jsi::HostFunctionType &func = static_cast<JsiHostFunctionWrapper *>(hostFunction)->hostFunction_;
+  CApiJsiRuntime *rt = CApiJsiRuntime::getFromJsiRuntime(*runtime);
+  // TODO: adapt for old versions (value kind mismatch).
+  const jsi::Value *thisArgVal = reinterpret_cast<const jsi::Value *>(thisArg);
+  *result =
+      CApiJsiRuntime::detachJsiValue(func(*rt, *thisArgVal, reinterpret_cast<const jsi::Value *>(args), argCount));
+  return jsi_status_ok;
+} catch (JSI_RUNTIME_SET_ERROR(*runtime)) {
+  return jsi_status_error;
+}
 
 //===========================================================================
 // CApiJsiRuntime implementation
@@ -957,12 +969,10 @@ jsi::Function CApiJsiRuntime::createFunctionFromHostFunction(
     const jsi::PropNameID &name,
     unsigned int paramCount,
     jsi::HostFunctionType func) {
-  //   return makeFunction(m_runtime.CreateFunctionFromHostFunction(
-  //       AsJsiPropertyIdRef(name), paramCount, JsiHostFunctionWrapper{std::move(func)}));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return makeFunction(nullptr);
+  auto hostFunctionWrapper = std::make_unique<JsiHostFunctionWrapper>(std::move(func));
+  JsiObject *result;
+  THROW_ON_ERROR(runtime_.createFunction(asJsiPropNameID(name), paramCount, hostFunctionWrapper.release(), &result));
+  return makeFunction(result);
 }
 
 jsi::Value
