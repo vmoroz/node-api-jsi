@@ -855,43 +855,33 @@ void CApiJsiRuntime::setPropertyValue(JSI_CONST_10 jsi::Object &obj, const jsi::
 }
 
 bool CApiJsiRuntime::isArray(const jsi::Object &obj) const {
-  //   return m_runtime.IsArray(asJsiObject(obj));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.isArray(asJsiObject(obj), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::isArrayBuffer(const jsi::Object &obj) const {
-  //   return m_runtime.IsArrayBuffer(asJsiObject(obj));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.isArrayBuffer(asJsiObject(obj), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::isFunction(const jsi::Object &obj) const {
-  //   return m_runtime.IsFunction(asJsiObject(obj));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.isFunction(asJsiObject(obj), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::isHostObject(const jsi::Object &obj) const {
-  //   return m_runtime.IsHostObject(asJsiObject(obj));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.isHostObject(asJsiObject(obj), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::isHostFunction(const jsi::Function &func) const {
-  //   return m_runtime.IsHostFunction(asJsiObject(func));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.isHostFunction(asJsiObject(func), &result));
+  return result;
 }
 
 jsi::Array CApiJsiRuntime::getPropertyNames(const jsi::Object &obj) {
