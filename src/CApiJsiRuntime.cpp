@@ -977,32 +977,23 @@ jsi::Function CApiJsiRuntime::createFunctionFromHostFunction(
 
 jsi::Value
 CApiJsiRuntime::call(const jsi::Function &func, const jsi::Value &jsThis, const jsi::Value *args, size_t count) {
-  //   VerifyElseCrashSz(count <= MaxCallArgCount, "Argument count must not exceed the supported max arg count.");
-  //   std::array<JsiValue, MaxCallArgCount> argsData;
-  //   for (size_t i = 0; i < count; ++i) {
-  //     argsData[i] = AsJsiValueRef(*(args + i));
-  //   }
-
-  //   return makeValue(
-  //       m_runtime.Call(asJsiObject(func), AsJsiValueRef(jsThis), {argsData.data(), argsData.data() + count}));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  // TODO: adapt for old APIs
+  THROW_ON_ERROR(runtime_.call(
+      asJsiObject(func),
+      &reinterpret_cast<const JsiValue &>(jsThis),
+      reinterpret_cast<const JsiValue *>(args),
+      count,
+      &result));
+  return makeValue(result);
 }
 
 jsi::Value CApiJsiRuntime::callAsConstructor(const jsi::Function &func, const jsi::Value *args, size_t count) {
-  //   VerifyElseCrashSz(count <= MaxCallArgCount, "Argument count must not exceed the supported max arg count.");
-  //   std::array<JsiValue, MaxCallArgCount> argsData;
-  //   for (size_t i = 0; i < count; ++i) {
-  //     argsData[i] = AsJsiValueRef(*(args + i));
-  //   }
-
-  //   return makeValue(m_runtime.CallAsConstructor(asJsiObject(func), {argsData.data(), argsData.data() + count}));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  // TODO: adapt for old APIs
+  THROW_ON_ERROR(
+      runtime_.callAsConstructor(asJsiObject(func), reinterpret_cast<const JsiValue *>(args), count, &result));
+  return makeValue(result);
 }
 
 jsi::Runtime::ScopeState *CApiJsiRuntime::pushScope() {
