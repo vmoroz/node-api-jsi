@@ -114,7 +114,6 @@ struct CApiJsiRuntime : jsi::Runtime {
   jsi::Object global() override;
   std::string description() override;
   bool isInspectable() override;
-  jsi::Instrumentation &instrumentation() override;
 
  protected:
   PointerValue *cloneSymbol(const PointerValue *pv) override;
@@ -592,12 +591,9 @@ jsi::Value CApiJsiRuntime::evaluatePreparedJavaScript(const std::shared_ptr<cons
 }
 
 bool CApiJsiRuntime::drainMicrotasks(int maxMicrotasksHint) {
-  //   try {
-  //   return m_runtime.DrainMicrotasks(maxMicrotasksHint);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.drainMicrotasks(maxMicrotasksHint, &result));
+  return result;
 }
 
 jsi::Object CApiJsiRuntime::global() {
@@ -607,30 +603,15 @@ jsi::Object CApiJsiRuntime::global() {
 }
 
 std::string CApiJsiRuntime::description() {
-  //   try {
-  //   return to_string(m_runtime.Description());
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return {};
+  const char *desc{};
+  THROW_ON_ERROR(runtime_.getDescription(&desc));
+  return desc;
 }
 
 bool CApiJsiRuntime::isInspectable() {
-  // try { return m_runtime.IsInspectable(); } catch (hresult_error const &) {
-  // RethrowJsiError();
-  // throw;
-  return {};
-}
-
-jsi::Instrumentation &CApiJsiRuntime::instrumentation() {
-  //   try {
-  //   // TODO: implement
-  //   VerifyElseCrash(false);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  // VerifyElseCrash(false);
-  throw std::exception();
+  bool result{};
+  THROW_ON_ERROR(runtime_.isInspectable(&result));
+  return result;
 }
 
 jsi::Runtime::PointerValue *CApiJsiRuntime::cloneSymbol(const jsi::Runtime::PointerValue *pv) {
