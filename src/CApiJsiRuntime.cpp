@@ -1007,45 +1007,35 @@ void CApiJsiRuntime::popScope(jsi::Runtime::ScopeState *scope) {
 }
 
 bool CApiJsiRuntime::strictEquals(const jsi::Symbol &a, const jsi::Symbol &b) const {
-  //   return m_runtime.SymbolStrictEquals(AsJsiSymbolRef(a), AsJsiSymbolRef(b));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.symbolStrictEquals(asJsiSymbol(a), asJsiSymbol(b), &result));
+  return result;
 }
 
 #if JSI_VERSION >= 6
 bool CApiJsiRuntime::strictEquals(const jsi::BigInt &a, const jsi::BigInt &b) const {
-  //   return m_runtime.BigIntStrictEquals(AsJsiBigIntRef(a), AsJsiBigIntRef(b));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.bigintStrictEquals(asJsiBigInt(a), asJsiBigInt(b), &result));
+  return result;
 }
 #endif
 
 bool CApiJsiRuntime::strictEquals(const jsi::String &a, const jsi::String &b) const {
-  //   return m_runtime.StringStrictEquals(AsJsiStringRef(a), AsJsiStringRef(b));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.stringStrictEquals(asJsiString(a), asJsiString(b), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::strictEquals(const jsi::Object &a, const jsi::Object &b) const {
-  //   return m_runtime.ObjectStrictEquals(asJsiObject(a), asJsiObject(b));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.objectStrictEquals(asJsiObject(a), asJsiObject(b), &result));
+  return result;
 }
 
 bool CApiJsiRuntime::instanceOf(const jsi::Object &o, const jsi::Function &f) {
-  //   return m_runtime.InstanceOf(asJsiObject(o), asJsiObject(f));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return false;
+  bool result;
+  THROW_ON_ERROR(runtime_.instanceOf(asJsiObject(o), asJsiObject(f), &result));
+  return result;
 }
 
 template <typename T>
