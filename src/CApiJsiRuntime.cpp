@@ -47,6 +47,20 @@ struct CApiJsiRuntime;
 //   std::shared_ptr<jsi::Buffer const> m_buffer;
 // };
 
+struct JsiBufferWrapper : JsiBuffer {
+  JsiBufferWrapper(const std::shared_ptr<const jsi::Buffer> &buffer, JsiRuntime *runtime) noexcept;
+
+ private:
+  static const JsiBufferVTable *getVTable() noexcept;
+  static jsi_status JSICALL destroy(JsiBuffer *buffer);
+  static jsi_status JSICALL data(JsiBuffer *buffer, const uint8_t **result);
+  static jsi_status JSICALL size(JsiBuffer *buffer, size_t *result);
+
+ private:
+  JsiRuntime *runtime_;
+  std::shared_ptr<const jsi::Buffer> buffer_;
+};
+
 // // A wrapper for ABI-safe JsiPreparedJavaScript.
 // struct JsiPreparedJavaScriptWrapper : jsi::PreparedJavaScript {
 //   JsiPreparedJavaScriptWrapper(JsiPreparedJavaScript const &preparedScript) noexcept;
@@ -255,7 +269,7 @@ struct CApiJsiRuntime : jsi::Runtime {
   static jsi::Value makeValue(JsiValue &value) noexcept;
 
   // Allow access to the helper function
-  friend struct JsiByteBufferWrapper;
+  friend struct JsiBufferWrapper;
   friend struct JsiHostObjectWrapper;
   friend struct JsiHostFunctionWrapper;
   friend struct AbiJSError;
@@ -384,24 +398,39 @@ struct CApiJsiRuntime : jsi::Runtime {
 // JsiBufferWrapper implementation
 //===========================================================================
 
-// JsiByteBufferWrapper::JsiByteBufferWrapper(
-//     JsiRuntime const &runtime,
-//     std::shared_ptr<Buffer const> const &buffer) noexcept
-//     : m_runtime{runtime}, m_buffer{buffer} {}
+JsiBufferWrapper::JsiBufferWrapper(const std::shared_ptr<const jsi::Buffer> &buffer, JsiRuntime *runtime) noexcept
+    : JsiBuffer(getVTable()), buffer_(buffer), runtime_(runtime) {}
 
-// JsiByteBufferWrapper::~JsiByteBufferWrapper() = default;
+/*static*/ const JsiBufferVTable *JsiBufferWrapper::getVTable() noexcept {
+  static JsiBufferVTable vtable{destroy, data, size};
+  return &vtable;
+}
+/*static*/ jsi_status JSICALL JsiBufferWrapper::destroy(JsiBuffer *buffer) {
+  delete static_cast<JsiBufferWrapper *>(buffer);
+  return jsi_status_ok;
+}
 
-// uint32_t JsiByteBufferWrapper::Size() try {
-//   return static_cast<uint32_t>(m_buffer->size());
-// } catch (JSI_RUNTIME_SET_ERROR(m_runtime)) {
-//   throw;
-// }
+/*static*/ jsi_status JSICALL JsiBufferWrapper::data(JsiBuffer *buffer, const uint8_t **result) {
+  JsiBufferWrapper *wrapper = static_cast<JsiBufferWrapper *>(buffer);
+  try {
+    const jsi::Buffer *buf = wrapper->buffer_.get();
+    *result = buf->data();
+    return jsi_status_ok;
+  } catch (JSI_RUNTIME_SET_ERROR(*wrapper->runtime_)) {
+    return jsi_status_error;
+  }
+}
 
-// void JsiByteBufferWrapper::GetData(JsiByteArrayUser const &useBytes) try {
-//   useBytes(winrt::array_view<uint8_t const>{m_buffer->data(), m_buffer->data() + m_buffer->size()});
-// } catch (JSI_RUNTIME_SET_ERROR(m_runtime)) {
-//   throw;
-// }
+/*static*/ jsi_status JSICALL JsiBufferWrapper::size(JsiBuffer *buffer, size_t *result) {
+  JsiBufferWrapper *wrapper = static_cast<JsiBufferWrapper *>(buffer);
+  try {
+    const jsi::Buffer *buf = wrapper->buffer_.get();
+    *result = buf->size();
+    return jsi_status_ok;
+  } catch (JSI_RUNTIME_SET_ERROR(*wrapper->runtime_)) {
+    return jsi_status_error;
+  }
+}
 
 //===========================================================================
 // JsiPreparedJavaScriptWrapper implementation
@@ -556,15 +585,10 @@ CApiJsiRuntime::~CApiJsiRuntime() {
 jsi::Value CApiJsiRuntime::evaluateJavaScript(
     const std::shared_ptr<const jsi::Buffer> &buffer,
     const std::string &sourceURL) {
-  //     runtime_->evaluateJavaScript(runtime_, )
-  // try {
-  //   return makeValue(
-  //       m_runtime.EvaluateJavaScript(winrt::make<JsiByteBufferWrapper>(m_runtime, buffer), to_hstring(sourceURL)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  // }
-  return jsi::Value();
+  JsiValue result;
+  auto bufferWrapper = std::make_unique<JsiBufferWrapper>(buffer, &runtime_);
+  THROW_ON_ERROR(runtime_.evaluateJavaScript(bufferWrapper.release(), sourceURL.c_str(), &result));
+  return makeValue(result);
 }
 
 std::shared_ptr<const jsi::PreparedJavaScript> CApiJsiRuntime::prepareJavaScript(
