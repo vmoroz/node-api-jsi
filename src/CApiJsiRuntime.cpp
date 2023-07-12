@@ -885,90 +885,72 @@ bool CApiJsiRuntime::isHostFunction(const jsi::Function &func) const {
 }
 
 jsi::Array CApiJsiRuntime::getPropertyNames(const jsi::Object &obj) {
-  //   return makeArray(m_runtime.GetPropertyIdArray(asJsiObject(obj)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return makeArray(nullptr);
+  JsiObject *result;
+  THROW_ON_ERROR(runtime_.getPropertyNames(asJsiObject(obj), &result));
+  return makeArray(result);
 }
 
 jsi::WeakObject CApiJsiRuntime::createWeakObject(const jsi::Object &obj) {
-  //   return makeWeakObject(m_runtime.CreateWeakObject(asJsiObject(obj)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return makeWeakObject(nullptr);
+  JsiWeakObject *result;
+  THROW_ON_ERROR(runtime_.createWeakObject(asJsiObject(obj), &result));
+  return makeWeakObject(result);
 }
 
 jsi::Value CApiJsiRuntime::lockWeakObject(JSI_NO_CONST_3 JSI_CONST_10 jsi::WeakObject &weakObj) {
-  //   return makeValue(m_runtime.LockWeakObject(AsJsiWeakObjectRef(weakObj)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  THROW_ON_ERROR(runtime_.lockWeakObject(asJsiWeakObject(weakObj), &result));
+  return makeValue(result);
 }
 
 jsi::Array CApiJsiRuntime::createArray(size_t length) {
-  //   return makeArray(m_runtime.CreateArray(static_cast<uint32_t>(length)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return makeArray(nullptr);
+  JsiObject *result;
+  THROW_ON_ERROR(runtime_.createArray(length, &result));
+  return makeArray(result);
 }
 
 #if JSI_VERSION >= 9
 jsi::ArrayBuffer CApiJsiRuntime::createArrayBuffer(std::shared_ptr<jsi::MutableBuffer> buffer) {
-  //   // TODO: implement
-  //   UNREFERENCED_PARAMETER(buffer);
-  //   VerifyElseCrash(false);
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return makeArrayBuffer(nullptr);
+  JsiObject *result;
+  uint8_t *data = buffer->data();
+  size_t size = buffer->size();
+  JsiMutableBuffer bufferPtr =
+      reinterpret_cast<JsiMutableBuffer>(new std::shared_ptr<jsi::MutableBuffer>(std::move(buffer)));
+  THROW_ON_ERROR(runtime_.createArrayBuffer(
+      bufferPtr,
+      data,
+      size,
+      [](void *data) { delete reinterpret_cast<std::shared_ptr<jsi::MutableBuffer> *>(data); },
+      &result));
+  return makeArrayBuffer(result);
 }
 #endif
 
 size_t CApiJsiRuntime::size(const jsi::Array &arr) {
-  //   return m_runtime.GetArraySize(asJsiObject(arr));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return 0;
+  size_t result;
+  THROW_ON_ERROR(runtime_.getArraySize(asJsiObject(arr), &result));
+  return result;
 }
 
 size_t CApiJsiRuntime::size(const jsi::ArrayBuffer &arrayBuffer) {
-  //   return m_runtime.GetArrayBufferSize(asJsiObject(arrayBuffer));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return 0;
+  size_t result;
+  THROW_ON_ERROR(runtime_.getArrayBufferSize(asJsiObject(arrayBuffer), &result));
+  return result;
 }
 
 uint8_t *CApiJsiRuntime::data(const jsi::ArrayBuffer &arrayBuffer) {
-  //   uint8_t *dataResult{};
-  //   m_runtime.GetArrayBufferData(asJsiObject(arrayBuffer), [&dataResult](array_view<uint8_t const> dataView) {
-  //     dataResult = const_cast<uint8_t *>(dataView.data());
-  //   });
-  //   return dataResult;
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return nullptr;
+  uint8_t *result;
+  THROW_ON_ERROR(runtime_.getArrayBufferData(asJsiObject(arrayBuffer), &result));
+  return result;
 }
 
 jsi::Value CApiJsiRuntime::getValueAtIndex(const jsi::Array &arr, size_t i) {
-  //   return makeValue(m_runtime.GetValueAtIndex(asJsiObject(arr), static_cast<uint32_t>(i)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  THROW_ON_ERROR(runtime_.getValueAtIndex(asJsiObject(arr), i, &result));
+  return makeValue(result);
 }
 
 void CApiJsiRuntime::setValueAtIndexImpl(JSI_CONST_10 jsi::Array &arr, size_t i, const jsi::Value &value) {
-  //   m_runtime.SetValueAtIndex(asJsiObject(arr), static_cast<uint32_t>(i), AsJsiValueRef(value));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
+  THROW_ON_ERROR(runtime_.setValueAtIndex(asJsiObject(arr), i, &asJsiValue(value)));
 }
 
 jsi::Function CApiJsiRuntime::createFunctionFromHostFunction(
