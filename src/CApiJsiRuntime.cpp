@@ -61,15 +61,15 @@ struct JsiBufferWrapper : JsiBuffer {
   std::shared_ptr<const jsi::Buffer> buffer_;
 };
 
-// // A wrapper for ABI-safe JsiPreparedJavaScript.
-// struct JsiPreparedJavaScriptWrapper : jsi::PreparedJavaScript {
-//   JsiPreparedJavaScriptWrapper(JsiPreparedJavaScript const &preparedScript) noexcept;
-//   ~JsiPreparedJavaScriptWrapper() noexcept;
-//   JsiPreparedJavaScript const &Get() const noexcept;
+// A wrapper for ABI-safe JsiPreparedJavaScript.
+struct JsiPreparedJavaScriptWrapper : jsi::PreparedJavaScript {
+  JsiPreparedJavaScriptWrapper(const JsiPreparedJavaScript *preparedScript) noexcept;
+  ~JsiPreparedJavaScriptWrapper() noexcept;
+  const JsiPreparedJavaScript *get() const noexcept;
 
-//  private:
-//   JsiPreparedJavaScript m_preparedScript;
-// };
+ private:
+  const JsiPreparedJavaScript *preparedScript_;
+};
 
 // An ABI-safe wrapper for jsi::HostObject.
 struct JsiHostObjectWrapper : JsiHostObject {
@@ -436,14 +436,18 @@ JsiBufferWrapper::JsiBufferWrapper(const std::shared_ptr<const jsi::Buffer> &buf
 // JsiPreparedJavaScriptWrapper implementation
 //===========================================================================
 
-// JsiPreparedJavaScriptWrapper::JsiPreparedJavaScriptWrapper(JsiPreparedJavaScript const &preparedScript) noexcept
-//     : m_preparedScript{preparedScript} {}
+JsiPreparedJavaScriptWrapper::JsiPreparedJavaScriptWrapper(const JsiPreparedJavaScript *preparedScript) noexcept
+    : preparedScript_(preparedScript) {}
 
-// JsiPreparedJavaScriptWrapper::~JsiPreparedJavaScriptWrapper() = default;
+JsiPreparedJavaScriptWrapper::~JsiPreparedJavaScriptWrapper() {
+  if (preparedScript_ != nullptr) {
+    preparedScript_->destroy();
+  }
+}
 
-// JsiPreparedJavaScript const &JsiPreparedJavaScriptWrapper::Get() const noexcept {
-//   return m_preparedScript;
-// }
+const JsiPreparedJavaScript *JsiPreparedJavaScriptWrapper::get() const noexcept {
+  return preparedScript_;
+}
 
 //===========================================================================
 // JsiHostObjectWrapper implementation
@@ -594,24 +598,17 @@ jsi::Value CApiJsiRuntime::evaluateJavaScript(
 std::shared_ptr<const jsi::PreparedJavaScript> CApiJsiRuntime::prepareJavaScript(
     const std::shared_ptr<const jsi::Buffer> &buffer,
     std::string sourceURL) {
-  //       try {
-  //   return std::make_shared<JsiPreparedJavaScriptWrapper>(
-  //       m_runtime.PrepareJavaScript(winrt::make<JsiByteBufferWrapper>(m_runtime, buffer), to_hstring(sourceURL)));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return nullptr;
+  JsiPreparedJavaScript *result;
+  auto bufferWrapper = std::make_unique<JsiBufferWrapper>(buffer, &runtime_);
+  THROW_ON_ERROR(runtime_.createPreparedScript(bufferWrapper.release(), sourceURL.c_str(), &result));
+  return std::make_shared<JsiPreparedJavaScriptWrapper>(result);
 }
 
 jsi::Value CApiJsiRuntime::evaluatePreparedJavaScript(const std::shared_ptr<const jsi::PreparedJavaScript> &js) {
-  //   try {
-  //   return makeValue(
-  //       m_runtime.EvaluatePreparedJavaScript(std::static_pointer_cast<JsiPreparedJavaScriptWrapper
-  //       const>(js)->Get()));
-  // } catch (hresult_error const &) {
-  //   RethrowJsiError();
-  //   throw;
-  return jsi::Value();
+  JsiValue result;
+  const JsiPreparedJavaScript *preparedScript = static_cast<const JsiPreparedJavaScriptWrapper *>(js.get())->get();
+  THROW_ON_ERROR(runtime_.evaluatePreparedScript(preparedScript, &result));
+  return makeValue(result);
 }
 
 bool CApiJsiRuntime::drainMicrotasks(int maxMicrotasksHint) {
