@@ -8,7 +8,7 @@
 using namespace facebook;
 
 #pragma warning(push)
-#pragma warning(disable : 4702) // `RethrowJsiError(); throw;` triggers 'unreachable code' warnings in Release builds
+#pragma warning(disable : 4702) // `throwJsiError(); throw;` triggers 'unreachable code' warnings in Release builds
 
 namespace Microsoft::NodeApiJsi {
 
@@ -28,7 +28,7 @@ const jsi::JSError &jsError) {                                        \
   do {                             \
     jsi_status status = expr;      \
     if (status != jsi_status_ok) { \
-      throwJsiError();             \
+      rt.throwJsiError();          \
     }                              \
   } while (0)
 
@@ -36,16 +36,6 @@ static constexpr size_t MaxCallArgCount = 32;
 
 // Forward declare the jsi::Runtime implementation on top of ABI-safe JsiRuntime.
 struct CApiJsiRuntime;
-
-// // An ABI-safe wrapper for jsi::Buffer.
-// struct JsiByteBufferWrapper : implements<JsiByteBufferWrapper, IJsiByteBuffer> {
-//   JsiByteBufferWrapper(JsiRuntime const &runtime, std::shared_ptr<jsi::Buffer const> const &buffer)
-//   noexcept; ~JsiByteBufferWrapper() noexcept; uint32_t Size(); void GetData(JsiByteArrayUser const &useBytes);
-
-//  private:
-//   JsiRuntime m_runtime;
-//   std::shared_ptr<jsi::Buffer const> m_buffer;
-// };
 
 struct JsiBufferWrapper : JsiBuffer {
   JsiBufferWrapper(const std::shared_ptr<const jsi::Buffer> &buffer, JsiRuntime *runtime) noexcept;
@@ -224,7 +214,6 @@ struct CApiJsiRuntime : jsi::Runtime {
 
   bool instanceOf(const jsi::Object &o, const jsi::Function &f) override;
 
-  void RethrowJsiError() const;
   void throwJsiError() const;
 
   void setJsiError(const jsi::JSError &jsError) noexcept;
@@ -245,8 +234,6 @@ struct CApiJsiRuntime : jsi::Runtime {
   static const JsiPropNameID *asJsiPropNameID(const jsi::PropNameID &name) noexcept;
   static const JsiWeakObject *asJsiWeakObject(const jsi::WeakObject &weakObject) noexcept;
   static JsiValue asJsiValue(const jsi::Value &value) noexcept;
-
-  //   static JsiPropertyIdRef DetachJsiPropertyIdRef(jsi::PropNameID &&name) noexcept;
   static JsiValue detachJsiValue(jsi::Value &&value) noexcept;
 
  private: // Convert ABI-safe JSI to JSI values
@@ -272,127 +259,58 @@ struct CApiJsiRuntime : jsi::Runtime {
   friend struct JsiBufferWrapper;
   friend struct JsiHostObjectWrapper;
   friend struct JsiHostFunctionWrapper;
-  friend struct AbiJSError;
-  friend struct AbiJSINativeException;
-
-  //  private: // PointerValue structures
-  //   struct DataPointerValue : PointerValue {
-  //     DataPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, uint64_t data) noexcept;
-  //     DataPointerValue(uint64_t data) noexcept;
-  //     void invalidate() override;
-
-  //     uint64_t m_data;
-  //     winrt::weak_ref<JsiRuntime> m_weakRuntime;
-  //   };
-
-  //   struct SymbolPointerValue : DataPointerValue {
-  //     SymbolPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiSymbolRef &&symbol) noexcept;
-  //     void invalidate() override;
-  //     static JsiSymbolRef const &GetData(PointerValue const *pv) noexcept;
-  //     static JsiSymbolRef Detach(PointerValue const *pv) noexcept;
-  //   };
-
-  //   struct BigIntPointerValue : DataPointerValue {
-  //     BigIntPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiBigIntRef &&bigInt) noexcept;
-  //     void invalidate() override;
-  //     static JsiBigIntRef const &GetData(PointerValue const *pv) noexcept;
-  //     static JsiBigIntRef Detach(PointerValue const *pv) noexcept;
-  //   };
-
-  //   struct StringPointerValue : DataPointerValue {
-  //     StringPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiStringRef &&str) noexcept;
-  //     void invalidate() override;
-  //     static JsiStringRef const &GetData(PointerValue const *pv) noexcept;
-  //     static JsiStringRef Detach(PointerValue const *pv) noexcept;
-  //   };
-
-  //   struct ObjectPointerValue : DataPointerValue {
-  //     ObjectPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiObjectRef &&obj) noexcept;
-  //     void invalidate() override;
-  //     static JsiObjectRef const &GetData(PointerValue const *pv) noexcept;
-  //     static JsiObjectRef Detach(PointerValue const *pv) noexcept;
-  //   };
-
-  //   struct PropNameIDPointerValue : DataPointerValue {
-  //     PropNameIDPointerValue(winrt::weak_ref<JsiRuntime> &&weakRuntime, JsiPropertyIdRef &&name) noexcept;
-  //     void invalidate() override;
-  //     static JsiPropertyIdRef const &GetData(PointerValue const *pv) noexcept;
-  //     static JsiPropertyIdRef Detach(PointerValue const *pv) noexcept;
-  //   };
-
-  // This type is to represent a reference to Value based on JsiValueData.
-  // It avoids extra memory allocation by using an in-place storage.
-  // It does not release the underlying pointer on invalidate() call
-  // by proving null as runtime pointer.
-  // struct ValueRef {
-  //   ValueRef(JsiValue const &data) noexcept;
-  //   ~ValueRef() noexcept;
-  //   operator jsi::Value const &() const noexcept;
-
-  //   using StoreType = std::aligned_storage_t<sizeof(DataPointerValue)>;
-  //   static void InitValueRef(JsiValue const &data, jsi::Value *value, StoreType *store) noexcept;
-
-  //  private:
-  //   StoreType m_pointerStore{};
-  //   jsi::Value m_value{};
-  // };
-
-  // struct ValueRefArray {
-  //   ValueRefArray(array_view<JsiValue const> args) noexcept;
-  //   jsi::Value const *Data() const noexcept;
-  //   size_t Size() const noexcept;
-
-  //  private:
-  //   std::array<ValueRef::StoreType, MaxCallArgCount> m_pointerStoreArray{};
-  //   std::array<jsi::Value, MaxCallArgCount> m_valueArray{};
-  //   size_t m_size{};
-  // };
-
-  // struct PropNameIDRef {
-  //   PropNameIDRef(JsiPropertyIdRef const &data) noexcept;
-  //   ~PropNameIDRef() noexcept;
-  //   operator jsi::PropNameID const &() const noexcept;
-
-  //   using StoreType = std::aligned_storage_t<sizeof(DataPointerValue)>;
-
-  //  private:
-  //   StoreType m_pointerStore{};
-  //   jsi::PropNameID m_propertyId;
-  // };
+  friend struct JsiJSError;
+  friend struct JsiJSINativeException;
 
  private:
   JsiRuntime &runtime_;
-
-  bool m_pendingJSError{false};
+  CApiJsiRuntime &rt{*this};
+  bool pendingJSError_{false};
 };
 
 //===========================================================================
-// AbiJSError implementation
+// JsiJSError implementation
 //===========================================================================
 
-// TODO:
-//  struct AbiJSError : jsi::JSError {
-//    AbiJSError(CApiJsiRuntime &rt, JsiError &&jsiError) noexcept
-//        : jsi::
-//              JSError{to_string(jsiError.ErrorDetails()), rt, jsi::Value(rt,
-//              CApiJsiRuntime::ValueRef(jsiError.Value()))},
-//          m_jsiError{std::move(jsiError)} {}
+struct JsiErrorDeleter {
+  void operator()(const JsiError *error) {
+    error->destroy();
+  }
+};
 
-//  private:
-//   JsiError m_jsiError;
-// };
+struct JsiJSError : jsi::JSError {
+  JsiJSError(CApiJsiRuntime &rt, const JsiError *jsiError) noexcept
+      : jsi::JSError(errorDetails(rt, jsiError), rt, errorValue(rt, jsiError)),
+        jsiError_(jsiError, JsiErrorDeleter()) {}
+
+  static std::string errorDetails(CApiJsiRuntime &rt, const JsiError *jsiError) {
+    const char *result;
+    THROW_ON_ERROR(jsiError->errorDetails(&result));
+    return result;
+  }
+
+  static jsi::Value errorValue(CApiJsiRuntime &rt, const JsiError *jsiError) {
+    JsiValue *result;
+    THROW_ON_ERROR(jsiError->value(result));
+    return rt.makeValue(*result);
+  }
+
+ private:
+  // We must support copy semantic.
+  std::shared_ptr<const JsiError> jsiError_;
+};
 
 //===========================================================================
-// AbiJSINativeException implementation
+// JsiJSINativeException implementation
 //===========================================================================
 
-// struct AbiJSINativeException : jsi::JSINativeException {
-//   AbiJSINativeException(JsiError &&jsiError) noexcept
-//       : jsi::JSINativeException{to_string(jsiError.ErrorDetails())}, m_jsiError{std::move(jsiError)} {}
+struct JsiJSINativeException : jsi::JSINativeException {
+  JsiJSINativeException(CApiJsiRuntime &rt, const JsiError *jsiError) noexcept
+      : jsi::JSINativeException(JsiJSError::errorDetails(rt, jsiError)), jsiError_(jsiError, JsiErrorDeleter()) {}
 
-//  private:
-//   JsiError m_jsiError;
-// };
+ private:
+  std::shared_ptr<const JsiError> jsiError_;
+};
 
 //===========================================================================
 // JsiBufferWrapper implementation
@@ -1051,34 +969,27 @@ struct AutoRestore {
   T m_value;
 };
 
-void CApiJsiRuntime::RethrowJsiError() const {
-  // auto jsiError = m_runtime.GetAndClearError();
-  // if (!m_pendingJSError && jsiError.ErrorType() == JsiErrorType::JSError) {
-  //   AutoRestore<bool> setValue{const_cast<bool *>(&m_pendingJSError), true};
-  //   throw AbiJSError{*const_cast<CApiJsiRuntime *>(this), std::move(jsiError)};
-  // } else {
-  //   throw AbiJSINativeException{std::move(jsiError)};
-  // }
-}
-
 [[noreturn]] void CApiJsiRuntime::throwJsiError() const {
-  // TODO:
-  //  auto jsiError = runtime_.getAndClearError();
-  //  if (!m_pendingJSError && jsiError.ErrorType() == JsiErrorType::JSError) {
-  //    AutoRestore<bool> setValue{const_cast<bool *>(&m_pendingJSError), true};
-  //    throw AbiJSError{*const_cast<CApiJsiRuntime *>(this), std::move(jsiError)};
-  //  } else {
-  //    throw AbiJSINativeException{std::move(jsiError)};
-  //  }
+  JsiError *jsiError;
+  THROW_ON_ERROR(runtime_.getAndClearLastError(&jsiError));
+  if (!pendingJSError_) {
+    JsiErrorType errorType;
+    THROW_ON_ERROR(jsiError->errorType(&errorType));
+    if (errorType == JsiErrorType::JSError) {
+      AutoRestore<bool> setValue{const_cast<bool *>(&pendingJSError_), true};
+      throw JsiJSError{*const_cast<CApiJsiRuntime *>(this), jsiError};
+    }
+  }
+
+  throw JsiJSINativeException{*const_cast<CApiJsiRuntime *>(this), jsiError};
 }
 
 void CApiJsiRuntime::setJsiError(const jsi::JSError &jsError) noexcept {
-  // runtime_.setError(JsiErrorType::JSError, jsError.what(), &asJsiValueRef(jsError.value()));
+  runtime_.setError(JsiErrorType::JSError, jsError.what(), &asJsiValue(jsError.value()));
 }
 
 void CApiJsiRuntime::setJsiError(const std::exception &nativeException) noexcept {
-  //  m_runtime.SetError(JsiErrorType::NativeException, nativeException.what(),
-  //  &asJsiValueRef(jsi::Value::undefined()));
+  runtime_.setError(JsiErrorType::NativeException, nativeException.what(), &asJsiValue(jsi::Value::undefined()));
 }
 
 //===========================================================================
@@ -1144,12 +1055,6 @@ void CApiJsiRuntime::setJsiError(const std::exception &nativeException) noexcept
 #endif
   return result;
 }
-
-// /*static*/ JsiPropertyIdRef CApiJsiRuntime::DetachJsiPropertyIdRef(PropNameID &&name) noexcept {
-//   // This method detaches JsiPropertyIdRef from the PropNameID.
-//   // It lets the PropNameIDPointerValue destructor run, but it must not destroy the underlying JS engine object.
-//   return PropNameIDPointerValue::Detach(getPointerValue(name));
-// }
 
 /*static*/ JsiValue CApiJsiRuntime::detachJsiValue(jsi::Value &&value) noexcept {
   // Here we should move data from Value to JsiValue.
@@ -1252,71 +1157,6 @@ jsi::Function CApiJsiRuntime::makeFunction(JsiObject *func) noexcept {
       return jsi::Value();
   }
 }
-
-//===========================================================================
-// CApiJsiRuntime::ValueRef implementation
-//===========================================================================
-
-// CApiJsiRuntime::ValueRef::ValueRef(JsiValue const &data) noexcept {
-//   InitValueRef(data, &m_value, std::addressof(m_pointerStore));
-// }
-
-// CApiJsiRuntime::ValueRef::~ValueRef() noexcept {}
-
-// CApiJsiRuntime::ValueRef::operator Value const &() const noexcept {
-//   return m_value;
-// }
-
-// /*static*/ void
-// CApiJsiRuntime::ValueRef::InitValueRef(JsiValue const &data, Value *value, StoreType *store) noexcept {
-//   // We assume that the JsiValue and Value have the same layout.
-//   auto valueAsDataPtr = reinterpret_cast<JsiValue *>(value);
-//   valueAsDataPtr->Kind = data.Kind;
-//   // TODO: JSIVALUECONVERSION - Need to fix JSI kind mapping
-//   switch (valueAsDataPtr->Kind) {
-//     case JsiValueKind::Symbol:
-//     case JsiValueKind::String:
-//     case JsiValueKind::Object:
-//       // Do in-place initialization in 'store'
-//       valueAsDataPtr->Data = reinterpret_cast<uint64_t>(new (store) DataPointerValue(data.Data));
-//       break;
-//     default:
-//       valueAsDataPtr->Data = data.Data;
-//       break;
-//   }
-// }
-
-//===========================================================================
-// CApiJsiRuntime::ValueRefArray implementation
-//===========================================================================
-
-// CApiJsiRuntime::ValueRefArray::ValueRefArray(array_view<JsiValue const> args) noexcept : m_size{args.size()} {
-//   VerifyElseCrashSz(m_size <= MaxCallArgCount, "Argument count must not exceed the MaxCallArgCount");
-//   for (uint32_t i = 0; i < args.size(); ++i) {
-//     ValueRef::InitValueRef(args[i], &m_valueArray[i], std::addressof(m_pointerStoreArray[i]));
-//   }
-// }
-
-// jsi::Value const *CApiJsiRuntime::ValueRefArray::Data() const noexcept {
-//   return m_valueArray.data();
-// }
-
-// size_t CApiJsiRuntime::ValueRefArray::Size() const noexcept {
-//   return m_size;
-// }
-
-//===========================================================================
-// CApiJsiRuntime::PropNameIDRef implementation
-//===========================================================================
-
-// CApiJsiRuntime::PropNameIDRef::PropNameIDRef(JsiPropertyIdRef const &data) noexcept
-//     : m_propertyId{make<PropNameID>(new(std::addressof(m_pointerStore)) DataPointerValue(data.Data))} {}
-
-// CApiJsiRuntime::PropNameIDRef::~PropNameIDRef() noexcept {}
-
-// CApiJsiRuntime::PropNameIDRef::operator jsi::PropNameID const &() const noexcept {
-//   return m_propertyId;
-// }
 
 } // namespace Microsoft::NodeApiJsi
 
