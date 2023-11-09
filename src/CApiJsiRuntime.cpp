@@ -42,9 +42,8 @@ struct JsiBufferWrapper : JsiBuffer {
 
  private:
   static const JsiBufferVTable *getVTable() noexcept;
-  static jsi_status JSICALL destroy(JsiBuffer *buffer);
-  static jsi_status JSICALL data(JsiBuffer *buffer, const uint8_t **result);
-  static jsi_status JSICALL size(JsiBuffer *buffer, size_t *result);
+  static jsi_status JSICALL destroy(const JsiBuffer *buffer);
+  static jsi_status JSICALL getSpan(const JsiBuffer *buffer, const uint8_t **data, size_t *result);
 
  private:
   JsiRuntime *runtime_;
@@ -80,11 +79,12 @@ struct JsiHostObjectWrapper : JsiHostObject {
 
 // The function object that wraps up the jsi::HostFunctionType
 struct JsiHostFunctionWrapper : JsiHostFunction {
-  JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept;
+  JsiHostFunctionWrapper(JsiRuntime *runtime, jsi::HostFunctionType hostFunction) noexcept;
   jsi::HostFunctionType &hostFunction() noexcept;
 
  private:
   static const JsiHostFunctionVTable *getVTable() noexcept;
+  static jsi_status JSICALL runtime(JsiHostFunction *hostFunction, JsiRuntime **result);
   static jsi_status JSICALL destroy(JsiHostFunction *hostFunction);
   static jsi_status JSICALL invoke(
       JsiHostFunction *hostFunction,
@@ -96,6 +96,7 @@ struct JsiHostFunctionWrapper : JsiHostFunction {
 
  private:
   jsi::HostFunctionType hostFunction_;
+  JsiRuntime *runtime_;
 };
 
 // JSI runtime implementation as a wrapper for the ABI-safe JsiRuntime.
@@ -280,19 +281,13 @@ struct JsiErrorDeleter {
 
 struct JsiJSError : jsi::JSError {
   JsiJSError(CApiJsiRuntime &rt, const JsiError *jsiError) noexcept
-      : jsi::JSError(errorDetails(rt, jsiError), rt, errorValue(rt, jsiError)),
-        jsiError_(jsiError, JsiErrorDeleter()) {}
-
-  static std::string errorDetails(CApiJsiRuntime &rt, const JsiError *jsiError) {
-    const char *result;
-    THROW_ON_ERROR(jsiError->errorDetails(&result));
-    return result;
-  }
+      : jsi::JSError(rt, errorValue(rt, jsiError)), jsiError_(jsiError, JsiErrorDeleter()) {}
 
   static jsi::Value errorValue(CApiJsiRuntime &rt, const JsiError *jsiError) {
-    JsiValue *result;
-    THROW_ON_ERROR(jsiError->value(result));
-    return rt.makeValue(*result);
+    const JsiValue *result;
+    THROW_ON_ERROR(jsiError->value(&result));
+    // TODO: make a copy instead
+    return rt.makeValue(*const_cast<JsiValue *>(result));
   }
 
  private:
@@ -306,7 +301,13 @@ struct JsiJSError : jsi::JSError {
 
 struct JsiJSINativeException : jsi::JSINativeException {
   JsiJSINativeException(CApiJsiRuntime &rt, const JsiError *jsiError) noexcept
-      : jsi::JSINativeException(JsiJSError::errorDetails(rt, jsiError)), jsiError_(jsiError, JsiErrorDeleter()) {}
+      : jsi::JSINativeException(message(rt, jsiError)), jsiError_(jsiError, JsiErrorDeleter()) {}
+
+  static std::string message(CApiJsiRuntime &rt, const JsiError *jsiError) {
+    const char *result;
+    THROW_ON_ERROR(jsiError->message(&result));
+    return result;
+  }
 
  private:
   std::shared_ptr<const JsiError> jsiError_;
@@ -320,30 +321,20 @@ JsiBufferWrapper::JsiBufferWrapper(const std::shared_ptr<const jsi::Buffer> &buf
     : JsiBuffer(getVTable()), buffer_(buffer), runtime_(runtime) {}
 
 /*static*/ const JsiBufferVTable *JsiBufferWrapper::getVTable() noexcept {
-  static JsiBufferVTable vtable{destroy, data, size};
+  static JsiBufferVTable vtable{destroy, getSpan};
   return &vtable;
 }
-/*static*/ jsi_status JSICALL JsiBufferWrapper::destroy(JsiBuffer *buffer) {
-  delete static_cast<JsiBufferWrapper *>(buffer);
+/*static*/ jsi_status JSICALL JsiBufferWrapper::destroy(const JsiBuffer *buffer) {
+  delete static_cast<const JsiBufferWrapper *>(buffer);
   return jsi_status_ok;
 }
 
-/*static*/ jsi_status JSICALL JsiBufferWrapper::data(JsiBuffer *buffer, const uint8_t **result) {
-  JsiBufferWrapper *wrapper = static_cast<JsiBufferWrapper *>(buffer);
+/*static*/ jsi_status JSICALL JsiBufferWrapper::getSpan(const JsiBuffer *buffer, const uint8_t **data, size_t *size) {
+  const JsiBufferWrapper *wrapper = static_cast<const JsiBufferWrapper *>(buffer);
   try {
     const jsi::Buffer *buf = wrapper->buffer_.get();
-    *result = buf->data();
-    return jsi_status_ok;
-  } catch (JSI_RUNTIME_SET_ERROR(*wrapper->runtime_)) {
-    return jsi_status_error;
-  }
-}
-
-/*static*/ jsi_status JSICALL JsiBufferWrapper::size(JsiBuffer *buffer, size_t *result) {
-  JsiBufferWrapper *wrapper = static_cast<JsiBufferWrapper *>(buffer);
-  try {
-    const jsi::Buffer *buf = wrapper->buffer_.get();
-    *result = buf->size();
+    *data = buf->data();
+    *size = buf->size();
     return jsi_status_ok;
   } catch (JSI_RUNTIME_SET_ERROR(*wrapper->runtime_)) {
     return jsi_status_error;
@@ -433,16 +424,22 @@ JsiHostObjectWrapper::set(JsiHostObject *hostObject, JsiRuntime *runtime, JsiPro
 // JsiHostFunctionWrapper implementation
 //===========================================================================
 
-JsiHostFunctionWrapper::JsiHostFunctionWrapper(jsi::HostFunctionType hostFunction) noexcept
-    : JsiHostFunction(getVTable()), hostFunction_(std::move(hostFunction)) {}
+JsiHostFunctionWrapper::JsiHostFunctionWrapper(JsiRuntime *runtime, jsi::HostFunctionType hostFunction) noexcept
+    : JsiHostFunction(getVTable()), runtime_(runtime), hostFunction_(std::move(hostFunction)) {}
 
 jsi::HostFunctionType &JsiHostFunctionWrapper::hostFunction() noexcept {
   return hostFunction_;
 }
 
 /*static*/ const JsiHostFunctionVTable *JsiHostFunctionWrapper::getVTable() noexcept {
-  static JsiHostFunctionVTable vtable{destroy, invoke};
+  static JsiHostFunctionVTable vtable{runtime, destroy, invoke};
   return &vtable;
+}
+
+/*static*/ jsi_status JSICALL JsiHostFunctionWrapper::runtime(JsiHostFunction *hostFunction, JsiRuntime **result) {
+  JsiHostFunctionWrapper *wrapper = static_cast<JsiHostFunctionWrapper *>(hostFunction);
+  *result = wrapper->runtime_;
+  return jsi_status_ok;
 }
 
 /*static*/ jsi_status JSICALL JsiHostFunctionWrapper::destroy(JsiHostFunction *hostFunction) {
@@ -518,14 +515,14 @@ std::shared_ptr<const jsi::PreparedJavaScript> CApiJsiRuntime::prepareJavaScript
     std::string sourceURL) {
   JsiPreparedJavaScript *result;
   auto bufferWrapper = std::make_unique<JsiBufferWrapper>(buffer, &runtime_);
-  THROW_ON_ERROR(runtime_.createPreparedScript(bufferWrapper.release(), sourceURL.c_str(), &result));
+  THROW_ON_ERROR(runtime_.prepareJavaScript(bufferWrapper.release(), sourceURL.c_str(), &result));
   return std::make_shared<JsiPreparedJavaScriptWrapper>(result);
 }
 
 jsi::Value CApiJsiRuntime::evaluatePreparedJavaScript(const std::shared_ptr<const jsi::PreparedJavaScript> &js) {
   JsiValue result;
   const JsiPreparedJavaScript *preparedScript = static_cast<const JsiPreparedJavaScriptWrapper *>(js.get())->get();
-  THROW_ON_ERROR(runtime_.evaluatePreparedScript(preparedScript, &result));
+  THROW_ON_ERROR(runtime_.evaluatePreparedJavaScript(preparedScript, &result));
   return makeValue(result);
 }
 
@@ -887,7 +884,7 @@ jsi::Function CApiJsiRuntime::createFunctionFromHostFunction(
     const jsi::PropNameID &name,
     unsigned int paramCount,
     jsi::HostFunctionType func) {
-  auto hostFunctionWrapper = std::make_unique<JsiHostFunctionWrapper>(std::move(func));
+  auto hostFunctionWrapper = std::make_unique<JsiHostFunctionWrapper>(&runtime_, std::move(func));
   JsiObject *result;
   THROW_ON_ERROR(runtime_.createFunction(asJsiPropNameID(name), paramCount, hostFunctionWrapper.release(), &result));
   return makeFunction(result);
